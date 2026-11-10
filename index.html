@@ -594,7 +594,7 @@ function vAcct(){
   const cards=accs.filter(a=>a.k==='card'&&!a.h),bills=(st.bills[S.month]||{});
   const unpaid=cards.reduce((s,a)=>{const b=bills[a.n]||{};return s+(b.paid?0:(+b.amt||0))},0);
   const cardH=cards.length?`<div class="card"><h2>${mLabel(S.month)}　信用卡帳單核對</h2>
-    ${cards.map(a=>{const b=bills[a.n]||{},[ps,pe]=cardPeriod(S.month,a.cd,a.lag),sp=cardSpend(a.n,S.month,a.cd),has=b.amt!==undefined&&b.amt!==null&&b.amt!=='',diff=has?(+b.amt)-sp:null;
+    ${cards.map(a=>{const b=bills[a.n]||{},[ps,pe]=cardPeriod(S.month,a.cd,a.lag!==0),sp=cardSpend(a.n,S.month,a.cd),has=b.amt!==undefined&&b.amt!==null&&b.amt!=='',diff=has?(+b.amt)-sp:null;
       const stt=!has?'<span class="muted">還沒填帳單</span>':diff===0?'<span class="inc">吻合 ✓</span>':diff>0?`<span class="exp">少記 $${fmt(diff)}</span>`:`<span class="warn" style="color:var(--warn)">多記 $${fmt(-diff)}</span>`;
       return `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="lr"><b style="font-weight:500">${esc(a.n)}</b><span class="sm" style="flex:none">${stt}</span></div>
       <div class="sm muted">帳單期間 ${ps.slice(5).replace('-','/')}～${pe.slice(5).replace('-','/')}　已記 <span class="num">$${fmt(sp)}</span></div>
@@ -765,7 +765,7 @@ function cardPeriod(m,cd,lag){
   return[st.getFullYear()+'-'+pad2(st.getMonth()+1)+'-'+pad2(st.getDate()),m+'-'+pad2(c)];
 }
 function cardRecs(card,m,cd){
-  const ac=S.settings.accounts.find(x=>x.n===card),[ps,pe]=cardPeriod(m,cd,ac&&ac.lag),out=[];
+  const ac=S.settings.accounts.find(x=>x.n===card),[ps,pe]=cardPeriod(m,cd,!(ac&&ac.lag===0)),out=[];
   for(let x=monthOf(ps);x<=monthOf(pe);x=monthAdd(x,1))for(const r of recs(x))if(r.ac===card&&(r.t==='e'||r.t==='i')&&r.d>=ps&&r.d<=pe)out.push(r);
   return out;
 }
@@ -804,7 +804,7 @@ function reconcile(items,rsAll,rsPeriod){
 }
 function cardAllRecs(card){const o=[];for(const m in S.months)for(const r of S.months[m])if(r.ac===card&&r.t==='e')o.push(r);return o}
 function reconData(card,m){
-  const st=S.settings,a=st.accounts.find(x=>x.n===card),bm=(st.bills[m]||{})[card]||{},[ps,pe]=cardPeriod(m,a.cd,a.lag),rsP=cardRecs(card,m,a.cd);
+  const st=S.settings,a=st.accounts.find(x=>x.n===card),bm=(st.bills[m]||{})[card]||{},[ps,pe]=cardPeriod(m,a.cd,a.lag!==0),rsP=cardRecs(card,m,a.cd);
   const wide=n=>{const f=new Date(ps),g=new Date(pe);f.setDate(f.getDate()-n);g.setDate(g.getDate()+n);const iso=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());return[iso(f),iso(g)]},[w0,w1]=wide(20),rsX=allRecs().filter(r=>r.ac===card&&(r.t==='e'||r.t==='i')&&r.d>=w0&&r.d<=w1&&!(r.d>=ps&&r.d<=pe)).sort((x,y)=>x.d.localeCompare(y.d));
   const items=bm.raw?parseBillText(bm.raw,[ps,pe],bm.flip):(bm.items||[]),ch=items.filter(x=>!x.credit),cr=items.filter(x=>x.credit);
   const chS=ch.reduce((s,x)=>s+x.a,0),crS=cr.reduce((s,x)=>s+x.a,0);
@@ -824,7 +824,7 @@ function drawRecon(){
   const d0=diff===0;
   openSheet(`<div class="shd"><h3>核對　${esc(RC.card)}　${mLabel(m)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><div class="grid2"><label class="field"><span>帳單總金額</span><input type="text" id="rc-amt" inputmode="numeric" value="${has?esc(bm.amt):''}"></label><label class="field"><span>結帳日（每月幾號）</span><input type="text" id="rc-cd" inputmode="numeric" value="${a.cd||''}" placeholder="例如 15"></label></div>
-  <label class="sm" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="rc-lag" ${a.lag?'checked':''}><span>帳單月份是「繳款月」（結帳日在上個月）</span></label><div class="sm muted" style="margin-top:6px">帳單期間 ${ps}～${pe}</div></div>
+  <label class="sm" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="rc-lag" ${a.lag!==0?'checked':''}><span>帳單月份是「繳款月」（結帳日在上個月）</span></label><div class="sm muted" style="margin-top:6px">帳單期間 ${ps}～${pe}</div></div>
   <div class="banner" style="display:flex;flex-direction:column;gap:6px">
    <div class="lr"><span>帳單金額</span><b class="num">${has?'$'+fmt(bill):'尚未填寫'}</b></div>
    <div class="lr"><span>你勾選的記帳（${sel.length} 筆）</span><b class="num">$${fmt(selSum)}</b></div>
@@ -853,7 +853,7 @@ function rcSave(){
   const cd=parseInt($('#rc-cd').value);a.cd=cd>0&&cd<=31?cd:undefined;a.lag=$('#rc-lag')&&$('#rc-lag').checked?1:0;
   const bills=st.bills[m]||(st.bills[m]={}),b=bills[RC.card]||(bills[RC.card]={});
   const v=$('#rc-amt').value.replace(/,/g,'').trim();b.amt=v===''?null:+v;
-  {const t=$('#rc-txt');if(t){b.raw=t.value;b.flip=$('#rc-flip').checked;b.items=parseBillText(b.raw,cardPeriod(m,a.cd,a.lag),b.flip)}}
+  {const t=$('#rc-txt');if(t){b.raw=t.value;b.flip=$('#rc-flip').checked;b.items=parseBillText(b.raw,cardPeriod(m,a.cd,a.lag!==0),b.flip)}}
   commitSettings();render();drawRecon();
 }
 
@@ -1059,7 +1059,7 @@ function saveRec(again){
   if(!(RC&&RC.back))S.month=monthOf(F.d);
   if(again){F={mode:'add',t:keepT,id:'',a:'',c:'',s:'',ac:keepAc,to:keepTo,d,tm:'',n:'',p:''};drawAdd();toast('已儲存')}
   else{closeSheet();toast('已儲存');if(RC&&RC.back){RC.back=false;render();drawRecon();
-    const a0=S.settings.accounts.find(x=>x.n===RC.card),[p0,p1]=cardPeriod(S.month,a0.cd,a0.lag);
+    const a0=S.settings.accounts.find(x=>x.n===RC.card),[p0,p1]=cardPeriod(S.month,a0.cd,a0.lag!==0);
     if(keepAc!==RC.card||d<p0||d>p1)setTimeout(()=>toast('這筆不在這張卡這期（'+p0.slice(5)+'～'+p1.slice(5)+'）的帳單內，所以沒列入核對'),300);
     return}}
   render();
@@ -1242,7 +1242,7 @@ const ACTS={
   rcon:t=>openRecon(t.dataset.n),
   rcchk:t=>{const st=S.settings,bills=st.bills[S.month]||(st.bills[S.month]={}),b=bills[RC.card]||(bills[RC.card]={}),off=t.dataset.x?(b.inc||(b.inc=[])):(b.off||(b.off=[])),id=t.dataset.id,i=off.indexOf(id);if(i>=0)off.splice(i,1);else off.push(id);commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
   rcedit:t=>{RC.back=true;ACTS.edit({dataset:{id:t.dataset.id}})},
-  rcnew:()=>{RC.back=true;closeSheet();const _a=S.settings.accounts.find(x=>x.n===RC.card),pe=cardPeriod(S.month,_a.cd,_a.lag)[1],d=pe<nowDate()?pe:nowDate();F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'',p:''};drawAdd()},
+  rcnew:()=>{RC.back=true;closeSheet();const _a=S.settings.accounts.find(x=>x.n===RC.card),pe=cardPeriod(S.month,_a.cd,_a.lag!==0)[1],d=pe<nowDate()?pe:nowDate();F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'',p:''};drawAdd()},
   rcfill:()=>{const D=reconData(RC.card,S.month),diff=(+D.bm.amt)-D.chkSum;if(!(diff>0))return;RC.back=true;closeSheet();const d=D.pe<nowDate()?D.pe:nowDate();F={mode:'add',t:'e',id:'',a:String(diff),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'帳單差額補記',p:''};drawAdd()},
   rcrun:()=>rcSave(),
   rcadd:t=>{const D=reconData(RC.card,S.month),it=D.R&&D.R.missing[+t.dataset.i];if(!it)return;
