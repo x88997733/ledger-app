@@ -497,7 +497,7 @@ function vCal(){
     cells+=`<button data-act="day" data-d="${ds}" class="${S.day===ds?'sel':''} ${ds===today?'today':''}"><b>${d}</b><small class="exp">${o.e?cmp(o.e):''}</small><small class="inc">${o.i?cmp(o.i):''}</small></button>`}
   const sel=S.day&&S.day.startsWith(m)?items(m).filter(i=>i.d===S.day):[];
   return `<div class="card"><div class="cal">${'日一二三四五六'.split('').map(w=>`<div class="wd">${w}</div>`).join('')}${cells}</div></div>`+
-    (S.day&&S.day.startsWith(m)?(sel.length?listBlock(sel):`<div class="card muted" style="text-align:center">${S.day.slice(5).replace('-','/')} 沒有紀錄</div>`):`<div class="muted sm" style="text-align:center">點日期可以看當天明細</div>`);
+    (S.day&&S.day.startsWith(m)?(sel.length?listBlock(sel):`<div class="card muted" style="text-align:center">${S.day.slice(5).replace('-','/')} 沒有紀錄</div>`)+`<button class="btn p" style="margin-top:10px" data-act="add">＋ 在 ${S.day.slice(5).replace('-','/')} 記一筆</button>`:`<div class="muted sm" style="text-align:center">點日期可以看當天明細</div>`);
 }
 function ring(p,h){const R=34,C=2*Math.PI*R;return `<svg viewBox="0 0 84 84" aria-hidden="true"><circle class="ring-bg" cx="42" cy="42" r="${R}" fill="none" stroke-width="7" opacity=".7"/><circle cx="42" cy="42" r="${R}" fill="none" stroke="hsl(${h} 70% 62%)" stroke-width="7" stroke-linecap="round" stroke-dasharray="${C*p/100} ${C}" transform="rotate(-90 42 42)"/><text x="42" y="46" text-anchor="middle" font-size="13" fill="currentColor" style="fill:var(--muted)">${p.toFixed(1)}%</text></svg>`}
 function vStats(){
