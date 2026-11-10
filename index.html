@@ -437,7 +437,7 @@ function items(m){
   for(const r of rs){
     if(used.has(r.id))continue;
     if(r.g&&byG[r.g].length===2){const o=byG[r.g].find(x=>x.id!==r.id),from=r.a<0?r:o,to=r.a<0?o:r;used.add(o.id);
-      out.push({kind:'x',id:from.id,d:r.d,tm:r.tm,from:from.ac,to:to.ac,a:Math.abs(r.a),n:r.n,g:r.g,ids:[from.id,to.id]});}
+      out.push({kind:'x',id:from.id,d:r.d,tm:r.tm,from:from.ac,to:to.ac,a:Math.abs(r.a),n:r.n,g:r.g,bill:to.bill,ids:[from.id,to.id]});}
     else out.push({kind:'r',r,id:r.id,d:r.d});
   }
   return out;
@@ -590,15 +590,15 @@ function vAcct(){
   const chart=S.hide?'':`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="近十二個月收支長條與淨資產折線圖">${bars}<polyline points="${pts}" fill="none" stroke-width="2" stroke-linejoin="round" style="stroke:var(--net)"/></svg><div class="legend"><span><i style="background:var(--exp)"></i>支出</span><span><i style="background:var(--inc)"></i>收入</span><span><i style="background:var(--net)"></i>總額</span></div>`;
   const groups=groupList().map(n=>[n,accs.filter(a=>grpOf(a)===n&&!a.h)]).concat([['不再使用',accs.filter(a=>a.h)]]).filter(g=>g[0]!=='不再使用'||g[1].length);
   const gH=groups.map(([n,as])=>{const sum=as.reduce((s,a)=>s+bs(a),0),shut=S.shut[n],hid=n==='不再使用';
-    return `<div style="display:flex;align-items:center"><button class="ghead ${shut?'shut':''}" style="flex:1" data-act="gshut" data-g="${esc(n)}" aria-expanded="${!shut}"><span>${esc(n)} (${as.length})</span><span class="num${hide}">${sum<0?'−':'+'}$${fmt(Math.abs(sum))}</span></button>${hid?'':`<button class="ibtn" style="width:34px;height:34px" data-act="acc" data-n="" data-g="${esc(n)}" aria-label="在${esc(n)}新增">${icon('plus')}</button>`}</div>${shut?'':(as.length?as.map(a=>`<button class="acrow" data-act="acc" data-n="${esc(a.n)}"><span class="aic">${icon(a.k==='stock'?'stats':'acct')}</span><b style="flex:1;font-weight:400;min-width:0">${esc(a.n)}</b><span class="amt${hide} ${bs(a)<0?'exp':'inc'}" style="font-size:18px">${bs(a)<0?'−':''}$${fmt(Math.abs(bs(a)))}</span></button>`).join(''):`<div class="sm muted" style="padding:6px 4px 10px">還沒有項目，按右邊「＋」新增${n==='銀行'?'銀行':n==='信用卡'?'信用卡':n==='股票'?'股票':''}</div>`)}`}).join('');
+    return `<div style="display:flex;align-items:center"><button class="ghead ${shut?'shut':''}" style="flex:1" data-act="gshut" data-g="${esc(n)}" aria-expanded="${!shut}"><span>${esc(n)} (${as.length})</span><span class="num${hide}">${sum<0?'−':'+'}$${fmt(Math.abs(sum))}</span></button>${hid?'':`<button class="ibtn" style="width:34px;height:34px" data-act="acc" data-n="" data-g="${esc(n)}" aria-label="在${esc(n)}新增">${icon('plus')}</button>`}</div>${shut?'':(as.length?as.map(a=>S.sortAcc?`<div class="acrow"><b style="flex:1;font-weight:400;min-width:0">${esc(a.n)}</b><button class="btn s" style="flex:none" data-act="amv2" data-n="${esc(a.n)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" style="flex:none" data-act="amv2" data-n="${esc(a.n)}" data-d="1" aria-label="下移">↓</button></div>`:`<button class="acrow" data-act="acc" data-n="${esc(a.n)}"><span class="aic">${icon(a.k==='stock'?'stats':'acct')}</span><b style="flex:1;font-weight:400;min-width:0">${esc(a.n)}</b><span class="amt${hide} ${bs(a)<0?'exp':'inc'}" style="font-size:18px">${bs(a)<0?'−':''}$${fmt(Math.abs(bs(a)))}</span></button>`).join(''):`<div class="sm muted" style="padding:6px 4px 10px">還沒有項目，按右邊「＋」新增${n==='銀行'?'銀行':n==='信用卡'?'信用卡':n==='股票'?'股票':''}</div>`)}`}).join('');
   const cards=accs.filter(a=>a.k==='card'&&!a.h),bills=(st.bills[S.month]||{});
-  const unpaid=cards.reduce((s,a)=>{const b=bills[a.n]||{};return s+(b.paid?0:(+b.amt||0))},0);
+  const unpaid=cards.reduce((s,a)=>{const b=bills[a.n]||{};return s+(b.paid?0:Math.max(0,(+b.amt||0)-billPaid(a.n,S.month)))},0);
   const cardH=cards.length?`<div class="card"><h2>${mLabel(S.month)}　信用卡帳單核對</h2>
     ${cards.map(a=>{const b=bills[a.n]||{},[ps,pe]=cardPeriod(S.month,a.cd,a.lag!==0),sp=reconData(a.n,S.month).chkSum,has=b.amt!==undefined&&b.amt!==null&&b.amt!=='',diff=has?(+b.amt)-sp:null;
       const stt=!has?'<span class="muted">還沒填帳單</span>':diff===0?'<span class="inc">吻合 ✓</span>':diff>0?`<span class="exp">少記 $${fmt(diff)}</span>`:`<span class="warn" style="color:var(--warn)">多記 $${fmt(-diff)}</span>`;
       return `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="lr"><b style="font-weight:500">${esc(a.n)}</b><span class="sm" style="flex:none">${stt}</span></div>
       <div class="sm muted">帳單期間 ${ps.slice(5).replace('-','/')}～${pe.slice(5).replace('-','/')}　已記 <span class="num">$${fmt(sp)}</span></div>
-      <div class="lr" style="margin-top:8px;gap:8px"><input type="text" inputmode="numeric" data-bill="${esc(a.n)}" value="${has?esc(b.amt):''}" placeholder="帳單金額" aria-label="${esc(a.n)} 帳單金額"><label class="sm" style="display:flex;gap:4px;align-items:center;white-space:nowrap;flex:none"><input type="checkbox" data-paid="${esc(a.n)}" ${b.paid?'checked':''}>已繳</label><button class="btn s" style="flex:none" data-act="rcon" data-n="${esc(a.n)}">核對明細</button></div></div>`}).join('')}
+      ${has?(()=>{const pd=billPaid(a.n,S.month),rm=(+b.amt)-pd;return `<div class="sm ${rm<=0||b.paid?'inc':'muted'}" style="margin-top:4px">${b.paid&&!pd?'已標記繳清':rm<=0?'已繳清 ✓　$'+fmt(pd):(pd?'已繳 $'+fmt(pd)+'，':'')+'還剩 $'+fmt(rm)+' 未繳'}</div>`})():''}<div class="lr" style="margin-top:8px;gap:8px"><input type="text" inputmode="numeric" data-bill="${esc(a.n)}" value="${has?esc(b.amt):''}" placeholder="帳單金額" aria-label="${esc(a.n)} 帳單金額"><button class="btn s" style="flex:none" data-act="rcpay" data-n="${esc(a.n)}">繳費</button><button class="btn s" style="flex:none" data-act="rcon" data-n="${esc(a.n)}">核對明細</button></div></div>`}).join('')}
     <div class="lr" style="margin-top:10px"><span class="muted sm">尚未繳款合計</span><span class="num exp">${fmt(unpaid)}</span></div></div>`
     :`<div class="card muted sm">在帳戶裡把信用卡的類型設成「信用卡」，這裡就會出現每月帳單核對。</div>`;
   return `<div style="display:flex;justify-content:space-between;align-items:center"><button class="ibtn" data-act="hide" aria-label="${S.hide?'顯示金額':'隱藏金額'}" aria-pressed="${S.hide}">${icon('eye')}</button><b style="font-family:var(--serif);letter-spacing:.06em">帳戶總覽</b><button class="ibtn" data-act="acc" data-n="" aria-label="新增帳戶">${icon('plus')}</button></div>
@@ -606,7 +606,7 @@ function vAcct(){
   <div class="sm muted" style="margin-top:4px">總資產 <span class="inc${hide}">${fmt(asset)}</span>　總負債 <span class="exp${hide}">${fmt(Math.abs(debt))}</span></div></div>
   <div class="card">${chart||'<div class="muted sm" style="text-align:center">金額已隱藏</div>'}</div>
   ${loanCardHtml()}
-  <div>${gH||'<div class="card muted">還沒有帳戶</div>'}</div>${cardH}
+  <div><div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button class="btn s" data-act="sortacc">${S.sortAcc?'完成排序':'調整順序'}</button></div>${gH||'<div class="card muted">還沒有帳戶</div>'}</div>${cardH}
   <p class="muted sm">餘額＝期初餘額＋所有紀錄加總。與實際不符時，點進帳戶輸入「目前實際餘額」就會自動校正。</p>`;
 }
 const todayStr=()=>nowDate();
@@ -681,7 +681,7 @@ function assistIssues(){
   const bills=st.bills[m]||{};
   st.accounts.filter(a=>a.k==='card'&&!a.h).forEach(a=>{const sp=ex.filter(r=>r.ac===a.n).reduce((s,r)=>s-r.a,0),b=bills[a.n]||{};
     if(sp>0&&(b.amt==null||b.amt===''))out.push({lvl:1,t:`「${a.n}」本月刷卡 $${fmt(sp)}，還沒填帳單金額`,d:'帳單出來後到「帳戶」填入，可以對照有沒有漏記。'});
-    else if(b.amt>0&&!b.paid)out.push({lvl:1,t:`「${a.n}」帳單 $${fmt(+b.amt)} 還沒標已繳`,d:'繳完記得到「帳戶」勾已繳。'})});
+    else if(b.amt>0&&!b.paid&&billPaid(a.n,m)<+b.amt)out.push({lvl:1,t:`「${a.n}」帳單 $${fmt(+b.amt)} 還沒繳清`,d:'到「帳戶」按「繳費」記一筆轉帳。'})});
   loanDues().filter(x=>x.due<nowDate()).forEach(x=>out.push({lvl:2,t:`「${x.l.name}」第 ${x.k} 期已逾期（${x.due.slice(5).replace('-','/')}）`,d:`金額 $${fmt(x.a)}。到「帳戶 → 借貸與分期」登記${x.l.kind==='out'?'收款':'繳款'}。`}));
   // 7 異常大額
   const catAvg={};allRecs().filter(r=>r.t==='e').forEach(r=>{const o=catAvg[r.c]||(catAvg[r.c]={n:0,s:0});o.n++;o.s-=r.a});
@@ -764,6 +764,7 @@ function cardPeriod(m,cd,lag){
   const pm=monthAdd(m,-1),[py,pmo]=pm.split('-').map(Number),c=Math.min(cd,dimOf(y,mo)),pc=Math.min(cd,dimOf(py,pmo)),st=new Date(py,pmo-1,pc+1);
   return[st.getFullYear()+'-'+pad2(st.getMonth()+1)+'-'+pad2(st.getDate()),m+'-'+pad2(c)];
 }
+const billPaid=(card,m)=>allRecs().filter(r=>r.t==='xi'&&r.ac===card&&r.bill===m).reduce((s,r)=>s+r.a,0);
 function cardRecs(card,m,cd){
   const ac=S.settings.accounts.find(x=>x.n===card),[ps,pe]=cardPeriod(m,cd,!(ac&&ac.lag===0)),out=[];
   for(let x=monthOf(ps);x<=monthOf(pe);x=monthAdd(x,1))for(const r of recs(x))if(r.ac===card&&(r.t==='e'||r.t==='i')&&r.d>=ps&&r.d<=pe)out.push(r);
@@ -1001,7 +1002,7 @@ function openAdd(rec){
   if(!S.ready){toast('雲端帳本還沒讀取完成，請稍等一下');return}
   const d=S.view==='cal'&&S.day?S.day:(S.month===monthOf(nowDate())?nowDate():S.month+'-01');
   if(rec){
-    if(rec.kind==='x')F={mode:'edit',t:'x',id:rec.id,ids:rec.ids,a:String(rec.a),ac:rec.from,to:rec.to,d:rec.d,tm:rec.tm,n:rec.n||'',p:'',g:rec.g};
+    if(rec.kind==='x')F={mode:'edit',t:'x',id:rec.id,ids:rec.ids,a:String(rec.a),ac:rec.from,to:rec.to,d:rec.d,tm:rec.tm,n:rec.n||'',p:'',g:rec.g,bill:rec.bill};
     else{const r=rec.r,raw=!(isExp(r)||isInc(r));
       F={mode:'edit',t:raw?'raw':(isInc(r)?'i':'e'),id:r.id,a:raw?String(r.a):String(Math.abs(r.a)),c:r.c,s:r.s,ac:r.ac,d:r.d,tm:r.tm,n:r.n||'',p:r.p||'',o:r.o||'',orig:r}}
   }else F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:st.lastAcc&&accNames().includes(st.lastAcc)?st.lastAcc:accNames()[0],to:accNames()[1]||accNames()[0],d,tm:'',n:'',p:''};
@@ -1050,10 +1051,11 @@ function saveRec(again){
   if(F.mode==='edit')removeIds(F.t==='x'?F.ids:[F.id]);
   if(F.t==='x'){const g=F.g||uid(),ids=F.ids||[uid(),uid()];
     put({id:ids[0],t:'xo',a:-a,c:'轉帳',s:'轉帳',ac:F.ac,d:F.d,tm,n:F.n,p:F.p||'',o:'',g});
-    put({id:ids[1],t:'xi',a:a,c:'轉帳',s:'轉帳',ac:F.to,d:F.d,tm,n:F.n,p:F.p||'',o:'',g});
+    put({id:ids[1],t:'xi',a:a,c:'轉帳',s:'轉帳',ac:F.to,d:F.d,tm,n:F.n,p:F.p||'',o:'',g,...(F.bill?{bill:F.bill}:{})});
   }else if(F.t==='raw'){put({...F.orig,a,ac:F.ac,d:F.d,tm,n:F.n,p:F.p||''})}
   else put({id:F.id||uid(),t:F.t,a:F.t==='e'?-a:a,c:F.c,s:F.s,ac:F.ac,d:F.d,tm,n:F.n,p:F.p||'',o:F.o||''});
   if(F.c&&F.s){const k=F.t==='i'?'i':'e',l=st.cats[k][F.c]||(st.cats[k][F.c]=[]);if(!l.includes(F.s))l.push(F.s)}
+  if(F.t==='x'&&F.bill)st.payFrom=F.ac;
   st.lastAcc=F.ac;commitSettings();touched.forEach(commitMonth);
   const keepT=F.t,keepAc=F.ac,keepTo=F.to,d=F.d;
   if(!(RC&&RC.back))S.month=monthOf(F.d);
@@ -1228,6 +1230,8 @@ const ACTS={
   catmv:t=>{const st=S.settings,k=t.dataset.k;st.cats[k]=moveKey(st.cats[k],t.dataset.c,+t.dataset.d);commitSettings();openSettings()},
   catdel:t=>{if(!t.dataset.sure){t.dataset.sure='1';t.textContent='再按一次';return}delete S.settings.cats[t.dataset.k][t.dataset.c];commitSettings();openSettings();render()},
   subdel:t=>{const l=S.settings.cats[t.dataset.k][t.dataset.c];const i=l.indexOf(t.dataset.s);if(i>=0)l.splice(i,1);commitSettings();openSettings()},
+  sortacc:()=>{S.sortAcc=!S.sortAcc;render()},
+  amv2:t=>{const st=S.settings,a=st.accounts.find(x=>x.n===t.dataset.n);if(!a)return;const d=+t.dataset.d,g=grpOf(a);let i=st.accounts.indexOf(a),j=i+d;while(j>=0&&j<st.accounts.length&&(grpOf(st.accounts[j])!==g||st.accounts[j].h))j+=d;if(j<0||j>=st.accounts.length)return;[st.accounts[i],st.accounts[j]]=[st.accounts[j],st.accounts[i]];commitSettings();render()},
   amv:t=>{const st=S.settings,a=st.accounts.find(x=>x.n===F.acc);if(!a)return;const d=+t.dataset.d,g=grpOf(a);let i=st.accounts.indexOf(a),j=i+d;while(j>=0&&j<st.accounts.length&&(grpOf(st.accounts[j])!==g||st.accounts[j].h))j+=d;if(j<0||j>=st.accounts.length)return;[st.accounts[i],st.accounts[j]]=[st.accounts[j],st.accounts[i]];commitSettings();render();toast('已調整順序')},
   adelmove:()=>{const st=S.settings,n=F.acc,to=$('#a-mv').value;if(!to){toast('請先選轉移到哪個項目');return}const a=st.accounts.find(x=>x.n===n),tg=st.accounts.find(x=>x.n===to);const touched=new Set();for(const m in S.months)S.months[m].forEach(r=>{if(r.ac===n){r.ac=to;touched.add(m)}});st.recurring.forEach(it=>{if(it.ac===n)it.ac=to});if(a&&tg)tg.init=(tg.init||0)+(a.init||0);st.accounts=st.accounts.filter(x=>x.n!==n);touched.forEach(commitMonth);commitSettings();closeSheet();render();toast('已轉移並刪除')},
   adelall:t=>{if(!t.dataset.sure){t.dataset.sure='1';t.textContent='再按一次：紀錄也會一起刪除，無法復原';return}const st=S.settings,n=F.acc,touched=new Set();for(const m in S.months){const k=S.months[m].length;S.months[m]=S.months[m].filter(r=>r.ac!==n);if(S.months[m].length!==k)touched.add(m)}st.recurring=st.recurring.filter(it=>it.ac!==n);st.accounts=st.accounts.filter(x=>x.n!==n);touched.forEach(commitMonth);commitSettings();closeSheet();render();toast('已刪除')},
@@ -1242,6 +1246,9 @@ const ACTS={
   rcon:t=>openRecon(t.dataset.n),
   rcall:()=>{const b=((S.settings.bills[S.month]||(S.settings.bills[S.month]={}))[RC.card]||(S.settings.bills[S.month][RC.card]={}));b.off=[];commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
   rcnone:()=>{const b=((S.settings.bills[S.month]||(S.settings.bills[S.month]={}))[RC.card]||(S.settings.bills[S.month][RC.card]={}));b.off=reconData(RC.card,S.month).rsP.map(r=>r.id);b.inc=[];commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
+  rcpay:t=>{if(!S.ready)return;const st=S.settings,card=t.dataset.n,b=(st.bills[S.month]||{})[card]||{},rm=Math.max(0,(+b.amt||0)-billPaid(card,S.month)),
+    from=st.payFrom&&accNames().includes(st.payFrom)?st.payFrom:(st.accounts.find(x=>x.k==='bank'&&!x.h)||st.accounts.find(x=>x.k!=='card'&&!x.h)||{}).n;
+    RC=null;F={mode:'add',t:'x',id:'',a:rm?String(rm):'',ac:from,to:card,d:nowDate(),tm:'',n:card+' '+(+S.month.slice(5))+'月帳單繳費',p:'',bill:S.month};drawAdd()},
   rcdone:()=>{closeSheet();RC=null;toast('核對完成 ✓')},
   rcchk:t=>{const st=S.settings,bills=st.bills[S.month]||(st.bills[S.month]={}),b=bills[RC.card]||(bills[RC.card]={}),off=t.dataset.x?(b.inc||(b.inc=[])):(b.off||(b.off=[])),id=t.dataset.id,i=off.indexOf(id);if(i>=0)off.splice(i,1);else off.push(id);commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
   rcedit:t=>{RC.back=true;ACTS.edit({dataset:{id:t.dataset.id}})},
