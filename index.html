@@ -769,54 +769,77 @@ function cardRecs(card,m,cd){
   return out;
 }
 const cardSpend=(card,m,cd)=>cardRecs(card,m,cd).reduce((s,r)=>s-r.a,0);
-function parseBillText(txt,period){
+function parseBillText(txt,period,flip){
   const [ps,pe]=period,items=[];
   for(const raw of String(txt||'').split(/\r?\n/)){
     const line=raw.trim();if(!line)continue;
     const dm=line.match(/(?:(\d{4})[\/\-.])?(\d{1,2})[\/\-.](\d{1,2})/);if(!dm)continue;
     let y=dm[1]?+dm[1]:+pe.slice(0,4);const mo=+dm[2],d=+dm[3];if(mo<1||mo>12||d<1||d>31)continue;
     let ds=y+'-'+pad2(mo)+'-'+pad2(d);if(!dm[1]&&ds>pe){y--;ds=y+'-'+pad2(mo)+'-'+pad2(d)}
-    const rest=line.replace(dm[0],' '),nums=rest.match(/-?\d[\d,]*(?:\.\d+)?/g);if(!nums)continue;
-    const a=parseFloat(nums[nums.length-1].replace(/,/g,''));if(!(a>0))continue;
-    const i=rest.lastIndexOf(nums[nums.length-1]);const n=(rest.slice(0,i)+rest.slice(i+nums[nums.length-1].length)).replace(/\s+/g,' ').trim();
-    items.push({d:ds,a:Math.round(a),n});
+    const rest=line.replace(dm[0],' '),eq=rest.search(/[=＝]/);
+    if(eq>=0){
+      // 算式行：例如「淘寶=-8-537」或「淘寶=29+1937」，逐項拆開。銀行 App 格式：負數是刷卡，正數是退款／入帳（可在畫面上反轉）
+      const name=rest.slice(0,eq).replace(/\s+/g,' ').trim(),expr=rest.slice(eq+1).replace(/[－−–]/g,'-').replace(/＋/g,'+');
+      const re=/([+\-]?)\s*(\d[\d,]*(?:\.\d+)?)/g;let m;
+      while((m=re.exec(expr))){const v=parseFloat(m[2].replace(/,/g,''));if(!(v>0))continue;let neg=m[1]==='-';if(flip)neg=!neg;items.push({d:ds,a:Math.round(v),n:name,credit:!neg})}
+    }else{
+      const nums=rest.match(/-?\d[\d,]*(?:\.\d+)?/g);if(!nums)continue;
+      const last=nums[nums.length-1],v=parseFloat(last.replace(/,/g,''));if(!v)continue;
+      const i=rest.lastIndexOf(last);const n=(rest.slice(0,i)+rest.slice(i+last.length)).replace(/\s+/g,' ').trim();
+      items.push({d:ds,a:Math.round(Math.abs(v)),n,credit:v<0});
+    }
   }
   return items;
 }
-function reconcile(items,rs){
+function reconcile(items,rsAll,rsPeriod){
   const used=new Set(),missing=[],matched=[];
   const dd=(a,b)=>Math.abs((new Date(a)-new Date(b))/864e5);
-  for(const it of [...items].sort((a,b)=>a.d.localeCompare(b.d))){
+  for(const it of [...items].filter(x=>!x.credit).sort((a,b)=>a.d.localeCompare(b.d))){
     let best=null,bd=99;
-    rs.forEach(r=>{if(used.has(r.id))return;if(Math.round(-r.a)!==it.a)return;const d=dd(r.d,it.d);if(d<=4&&d<bd){best=r;bd=d}});
+    rsAll.forEach(r=>{if(used.has(r.id))return;if(Math.round(-r.a)!==it.a)return;const d=dd(r.d,it.d);if(d<=4&&d<bd){best=r;bd=d}});
     if(best){used.add(best.id);matched.push([it,best])}else missing.push(it);
   }
-  return{matched,missing,extra:rs.filter(r=>!used.has(r.id))};
+  return{matched,missing,extra:rsPeriod.filter(r=>!used.has(r.id))};
+}
+function cardAllRecs(card){const o=[];for(const m in S.months)for(const r of S.months[m])if(r.ac===card&&r.t==='e')o.push(r);return o}
+function reconData(card,m){
+  const st=S.settings,a=st.accounts.find(x=>x.n===card),bm=(st.bills[m]||{})[card]||{},[ps,pe]=cardPeriod(m,a.cd),rsP=cardRecs(card,m,a.cd);
+  const items=bm.items||[],ch=items.filter(x=>!x.credit),cr=items.filter(x=>x.credit);
+  const chS=ch.reduce((s,x)=>s+x.a,0),crS=cr.reduce((s,x)=>s+x.a,0);
+  return{a,bm,ps,pe,rsP,items,ch,cr,chS,crS,net:chS-crS,rec:rsP.reduce((s,r)=>s-r.a,0),R:items.length?reconcile(items,cardAllRecs(card),rsP):null};
 }
 let RC=null;
 function openRecon(card){RC={card};drawRecon()}
 function drawRecon(){
-  const st=S.settings,a=st.accounts.find(x=>x.n===RC.card),m=S.month,bm=(st.bills[m]||{})[RC.card]||{},[ps,pe]=cardPeriod(m,a.cd),rs=cardRecs(RC.card,m,a.cd),rec=rs.reduce((s,r)=>s-r.a,0);
-  const items=bm.items||[],has=bm.amt!==undefined&&bm.amt!==null&&bm.amt!=='',itemSum=items.reduce((s,x)=>s+x.a,0),total=has?+bm.amt:(items.length?itemSum:null);
-  const R=items.length?reconcile(items,rs):null,diff=total===null?null:total-rec;
+  const m=S.month,D=reconData(RC.card,m),{a,bm,ps,pe,rsP,items,ch,cr,chS,crS,net,rec,R}=D;
+  const has=bm.amt!==undefined&&bm.amt!==null&&bm.amt!=='',total=has?+bm.amt:(items.length?net:null),diff=total===null?null:total-rec;
   const row=(x)=>`${x.d.slice(5).replace('-','/')} ${esc(x.n||x.c||'')}${x.s?'·'+esc(x.s):''}　$${fmt(x.a>0?x.a:-x.a)}`;
+  const tag=(d)=>d===0?'<b class="inc">吻合 ✓</b>':d>0?`<b class="exp">少記 $${fmt(d)}</b>`:`<b style="color:var(--warn)">多記 $${fmt(-d)}</b>`;
+  let hint='';
+  if(items.length&&has){const t=+bm.amt,c=[[net,'刷卡扣掉退款後的淨額'],[chS,'刷卡合計（沒扣退款）'],[chS+crS,'全部金額相加']].find(x=>Math.abs(x[0]-t)<=1);
+    hint=c?`<div class="sm inc">✓ 明細的「${c[1]}」等於帳單金額，明細貼得完整。</div>`:`<div class="sm" style="color:var(--warn)">明細加總跟帳單金額對不上（差 $${fmt(Math.abs(net-t))}），可能漏貼了幾行，或正負號判斷相反（可以勾下面的「反轉」）。</div>`}
   openSheet(`<div class="shd"><h3>核對　${esc(RC.card)}　${mLabel(m)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><div class="grid2"><label class="field"><span>帳單總金額</span><input type="text" id="rc-amt" inputmode="numeric" value="${has?esc(bm.amt):''}"></label><label class="field"><span>結帳日（每月幾號）</span><input type="text" id="rc-cd" inputmode="numeric" value="${a.cd||''}" placeholder="例如 15"></label></div>
   <div class="sm muted" style="margin-top:8px">帳單期間 ${ps}～${pe}</div>
-  <label class="field" style="margin-top:10px"><span>貼上帳單明細（每行一筆，例如「11/08 全家 120」；可不貼，只比對總額）</span><textarea id="rc-txt" rows="5" placeholder="11/08 全家便利商店 120&#10;11/09 捷運 70">${esc(bm.raw||'')}</textarea></label>
+  <label class="field" style="margin-top:10px"><span>貼上帳單明細（每行一筆）。可以貼算式，例如「10/7淘寶=-1-73-2」，會自動拆開加總</span><textarea id="rc-txt" rows="6" placeholder="11/08 全家便利商店 120&#10;10/7淘寶=-1-73-2-155">${esc(bm.raw||'')}</textarea></label>
+  <label class="sm" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="rc-flip" ${bm.flip?'checked':''}><span>反轉：算式裡「正數」才是刷卡（預設負數是刷卡、正數是退款）</span></label>
   <button class="btn p" style="width:100%;margin-top:10px" data-act="rcrun">儲存並核對</button></div>
-  <div class="banner">已記 <b class="num">$${fmt(rec)}</b>（${rs.length} 筆）${total===null?'　尚未填帳單金額':`　帳單 <b class="num">$${fmt(total)}</b>　${diff===0?'<b class="inc">吻合 ✓</b>':diff>0?`<b class="exp">少記 $${fmt(diff)}</b>`:`<b style="color:var(--warn)">多記 $${fmt(-diff)}</b>`}`}</div>
+  ${items.length?`<div class="card"><b style="font-weight:500">明細加總</b>
+   <div class="lr sm" style="padding:4px 0"><span>刷卡 ${ch.length} 筆</span><span class="num">$${fmt(chS)}</span></div>
+   <div class="lr sm" style="padding:4px 0"><span>退款／入帳 ${cr.length} 筆</span><span class="num">−$${fmt(crS)}</span></div>
+   <div class="lr" style="padding:6px 0;border-top:1px solid var(--line)"><b style="font-weight:500">淨額</b><b class="num">${net<0?'−':''}$${fmt(Math.abs(net))}</b></div>${hint}</div>`:''}
+  <div class="banner">你記的 <b class="num">$${fmt(rec)}</b>（${rsP.length} 筆）${total===null?'　尚未填帳單金額':`　${has?'帳單':'明細淨額'} <b class="num">$${fmt(total)}</b>　${tag(diff)}`}</div>
   ${R?`<div class="card"><b style="font-weight:500">已對上 ${R.matched.length} 筆</b></div>
   <div class="card"><b style="font-weight:500;color:var(--exp)">帳單有、你沒記（${R.missing.length}）</b>${R.missing.length?R.missing.map((x,i)=>`<div class="lr sm" style="padding:6px 0"><span>${row(x)}</span><button class="btn s" style="flex:none" data-act="rcadd" data-i="${i}">補記</button></div>`).join(''):'<div class="sm muted">沒有</div>'}</div>
   <div class="card"><b style="font-weight:500;color:var(--warn)">你記了、帳單沒有（${R.extra.length}）</b><div class="sm muted" style="margin:2px 0 6px">可能是重複記、金額記錯，或是還沒入帳、算在下一期。</div>${R.extra.length?R.extra.map(x=>`<div class="sm" style="padding:4px 0">${row({...x,a:-x.a})}</div>`).join(''):'<div class="sm muted">沒有</div>'}</div>`
-  :`<div class="sm muted">${items.length?'':'貼上帳單明細後，可以逐筆找出少記或多記的項目。'}</div>`}`);
+  :`<div class="sm muted">貼上帳單明細後，會自動加總，並找出少記或多記的項目。</div>`}`);
 }
 function rcSave(){
   const st=S.settings,a=st.accounts.find(x=>x.n===RC.card),m=S.month;
   const cd=parseInt($('#rc-cd').value);a.cd=cd>0&&cd<=31?cd:undefined;
   const bills=st.bills[m]||(st.bills[m]={}),b=bills[RC.card]||(bills[RC.card]={});
   const v=$('#rc-amt').value.replace(/,/g,'').trim();b.amt=v===''?null:+v;
-  b.raw=$('#rc-txt').value;b.items=parseBillText(b.raw,cardPeriod(m,a.cd));
+  b.raw=$('#rc-txt').value;b.flip=$('#rc-flip').checked;b.items=parseBillText(b.raw,cardPeriod(m,a.cd),b.flip);
   commitSettings();render();drawRecon();
 }
 
@@ -1186,7 +1209,7 @@ const ACTS={
   adedup:t=>{const ids=t.dataset.ids.split(',');const touched=new Set();for(const m in S.months){const n=S.months[m].length;S.months[m]=S.months[m].filter(r=>!ids.includes(r.id));if(S.months[m].length!==n)touched.add(m)}touched.forEach(commitMonth);render();openAssist();toast('已刪除');},
   rcon:t=>openRecon(t.dataset.n),
   rcrun:()=>rcSave(),
-  rcadd:t=>{const st=S.settings,a=st.accounts.find(x=>x.n===RC.card),bm=(st.bills[S.month]||{})[RC.card]||{},rs=cardRecs(RC.card,S.month,a.cd),R=reconcile(bm.items||[],rs),it=R.missing[+t.dataset.i];if(!it)return;
+  rcadd:t=>{const D=reconData(RC.card,S.month),it=D.R&&D.R.missing[+t.dataset.i];if(!it)return;
     closeSheet();F={mode:'add',t:'e',id:'',a:String(it.a),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d:it.d,tm:'',n:it.n,p:''};drawAdd()},
   loanform:t=>openLoanForm(t.dataset.id),
   lkind:t=>{syncLF();LF.kind=t.dataset.v;drawLoanForm()},
