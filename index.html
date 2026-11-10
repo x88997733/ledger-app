@@ -276,11 +276,26 @@ function salaryBase(recs,st,month){
   const o=st.baseOverride&&st.baseOverride[month];if(o!=null&&o!=='')return+o;
   return recs.filter(r=>isInc(r)&&(st.salarySubs.includes(r.s)||(st.incBonus&&r.s==='獎金'))).reduce((s,r)=>s+r.a,0);
 }
-function allocation(recs,st,month){
-  const base=salaryBase(recs,st,month);
-  const rows=Object.entries(st.ratios).map(([k,p])=>({k,p,budget:Math.round(base*p),spent:0}));
+function ratiosFor(st,m){
+  const h=st.ratioHist||{},ks=Object.keys(h).filter(k=>k<=m).sort();
+  if(!ks.length)return{r:st.ratios,c:st.carry||{},start:null};
+  const e=h[ks[ks.length-1]];return{r:Object.fromEntries(e.r),c:e.c||{},start:ks[ks.length-1]};
+}
+function allocation(recs,st,month,byMonth){
+  const rf=ratiosFor(st,month),base=salaryBase(recs,st,month);
+  const rows=Object.entries(rf.r).map(([k,p])=>({k,p,budget:Math.round(base*p),spent:0,carry:0,keep:!!rf.c[k]}));
   const idx=Object.fromEntries(rows.map(r=>[r.k,r]));
   for(const r of recs)if(isExp(r)){const b=idx[bucketOf(r,st)];if(b)b.spent+=-r.a}
+  if(byMonth&&rf.start&&rf.start!=='0000-00'&&rf.start<month){
+    let prev={},m=rf.start;
+    while(m<month){
+      const mr=byMonth[m]||[],rfm=ratiosFor(st,m),b0=salaryBase(mr,st,m),sp={};
+      for(const r of mr)if(isExp(r)){const k=bucketOf(r,st);sp[k]=(sp[k]||0)-r.a}
+      const nx={};for(const [k,p] of Object.entries(rfm.r))if(rfm.c[k])nx[k]=(prev[k]||0)+Math.round(b0*p)-(sp[k]||0);
+      prev=nx;m=monthAdd(m,1);
+    }
+    rows.forEach(r=>{if(r.keep)r.carry=prev[r.k]||0});
+  }
   return{base,rows};
 }
 function toMozeCSV(byMonth){
@@ -427,6 +442,7 @@ const IC={list:'<path d="M4 6h16M4 12h16M4 18h10"/>',cal:'<rect x="3.5" y="5" wi
   prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8L21.5 18.5l-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/>',gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',trend:'<path d="M3 17l6-6 4 4 7-8"/><path d="M15 7h5v5"/>',eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',plus:'<path d="M12 5v14M5 12h14"/>'};
 const icon=n=>`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[n]}</svg>`;
 const accNames=()=>S.settings.accounts.map(a=>a.n);
+const activeNames=()=>S.settings.accounts.filter(a=>!a.h).map(a=>a.n);
 const accKind=n=>(S.settings.accounts.find(a=>a.n===n)||{}).k||'bank';
 
 /* ---------- list items (pairs transfers) ---------- */
@@ -465,7 +481,7 @@ function listBlock(its){
 /* ---------- views ---------- */
 function hdrHtml(){
   const t=monthTotals(recs(S.month));
-  return `<div class="mrow"><button class="ibtn" data-act="mon" data-n="-1" aria-label="上個月">${icon('prev')}</button><h1>${mLabel(S.month)}</h1><button class="ibtn" data-act="mon" data-n="1" aria-label="下個月">${icon('next')}</button><button class="ibtn" data-act="assist" aria-label="整理助手">${icon('spark')}</button><button class="ibtn" data-act="settings" aria-label="設定">${icon('gear')}</button></div>
+  return `<div class="mrow"><button class="ibtn" data-act="mon" data-n="-1" aria-label="上個月">${icon('prev')}</button><h1>${mLabel(S.month)}</h1><button class="ibtn" data-act="mon" data-n="1" aria-label="下個月">${icon('next')}</button><button class="ibtn" data-act="settings" aria-label="設定">${icon('gear')}</button></div>
   <div class="sum"><div><span class="lbl">支出</span><span class="num exp">${fmt(t.e)}</span></div><div><span class="lbl">收入</span><span class="num inc">${fmt(t.i)}</span></div><div><span class="lbl">結餘</span><span class="num">${t.i-t.e<0?'−':''}${fmt(Math.abs(t.i-t.e))}</span></div></div>`;
 }
 function bannerHtml(){
@@ -503,7 +519,7 @@ function ring(p,h){const R=34,C=2*Math.PI*R;return `<svg viewBox="0 0 84 84" ari
 function vStats(){
   const m=S.month,st=S.settings,mr=recs(m),ex=mr.filter(isExp),inn=mr.filter(isInc);
   const e=ex.reduce((s,r)=>s-r.a,0),i=inn.reduce((s,r)=>s+r.a,0),net=i-e;
-  const tabs=[['ov','總覽'],['chart','圖表'],['cat','類別'],['rank','排行'],['acc','帳戶'],['proj','專案']];
+  const tabs=[['ov','總覽'],['chart','圖表'],['cat','類別'],['rank','排行'],['acc','帳戶'],['proj','專案'],['loan','借貸分期']];
   const sub=`<div class="subtabs" role="tablist">${tabs.map(([k,n])=>`<button role="tab" data-act="rep" data-v="${k}" ${S.rep===k?'aria-current="true"':''}>${n}</button>`).join('')}</div>`;
   const grp=(arr,key)=>{const o={};arr.forEach(r=>{const k=key(r)||'未分類';o[k]=(o[k]||0)-r.a});return Object.entries(o).sort((a,b)=>b[1]-a[1])};
   let body='';
@@ -546,6 +562,8 @@ function vStats(){
       <div class="bar ${b&&o.v>b?'over':''}"><i style="width:${Math.min(100,b?o.v/b*100:pc)}%"></i></div>
       ${open?`<div style="padding:6px 0 4px 22px">${Object.entries(o.sub).sort((a,b)=>b[1]-a[1]).map(([s,v])=>`<div class="lr sm" style="padding:3px 0"><span>${esc(s)}</span><span class="num">${fmt(v)}</span></div>`).join('')}</div>`:''}</div>`}).join('<div style="height:10px"></div>');
     body=`<div class="seg" role="group" aria-label="類型"><button aria-pressed="${ty==='e'}" data-act="stat" data-v="e">支出</button><button aria-pressed="${ty==='i'}" data-act="stat" data-v="i">收入</button></div><div class="card"><h2>${ty==='e'?'支出':'收入'}分類　<span class="num">${fmt(total)}</span></h2>${list.length?rowsH:'<div class="muted" style="text-align:center;padding:12px">這個月還沒有紀錄</div>'}</div>`;
+  }else if(S.rep==='loan'){
+    body=loanCardHtml();
   }else if(S.rep==='rank'){
     const top=[...ex].sort((a,b)=>a.a-b.a).slice(0,10);
     body=`<div class="card"><h2>本月最大 10 筆支出</h2>${top.map((r,i)=>`<div class="lr" style="padding:8px 0"><span class="muted num" style="flex:none;width:22px">${i+1}</span><span style="min-width:0"><b style="font-weight:500">${esc(r.c)}${r.s?' · '+esc(r.s):''}</b><div class="sm muted">${r.d.slice(5).replace('-','/')} ${esc(r.n||r.ac)}</div></span><span class="amt exp" style="flex:none">${fmt(-r.a)}</span></div>`).join('')||'<div class="muted" style="text-align:center">還沒有資料</div>'}</div>`;
@@ -556,12 +574,13 @@ function vStats(){
   return sub+body;
 }
 function vAlloc(){
-  const st=S.settings,m=S.month,a=allocation(recs(m),st,m);
+  const st=S.settings,m=S.month,a=allocation(recs(m),st,m,S.months);
   const sumP=Object.values(st.ratios).reduce((s,x)=>s+x,0);
   const spent=a.rows.reduce((s,r)=>s+r.spent,0);
-  const rowsH=a.rows.map(r=>{const left=r.budget-r.spent,over=left<0;
-    return `<div><div class="lr"><b>${esc(r.k)} <span class="tag num">${Math.round(r.p*1000)/10}%</span></b><span class="num">${fmt(r.budget)}</span></div>
-      <div class="bar ${over?'over':''}" style="margin:6px 0"><i style="width:${r.budget?Math.min(100,r.spent/r.budget*100):(r.spent?100:0)}%"></i></div>
+  const rowsH=a.rows.map(r=>{const left=r.carry+r.budget-r.spent,over=left<0;
+    return `<div><div class="lr"><b>${esc(r.k)} <span class="tag num">${Math.round(r.p*1000)/10}%</span></b><span class="num">${fmt(r.budget+r.carry)}</span></div>
+      ${r.keep?`<div class="sm muted">本月 ${fmt(r.budget)}${r.carry?(r.carry>0?'　＋上月結餘 ':'　−上月超支 ')+fmt(Math.abs(r.carry)):''}　<span class="tag">滾存</span></div>`:''}
+      <div class="bar ${over?'over':''}" style="margin:6px 0"><i style="width:${(r.budget+r.carry)>0?Math.min(100,r.spent/(r.budget+r.carry)*100):(r.spent?100:0)}%"></i></div>
       <div class="lr sm muted"><span>已花 <span class="num">${fmt(r.spent)}</span></span><span class="${over?'exp':''}">${over?'超支 ':'剩 '}<span class="num">${fmt(Math.abs(left))}</span></span></div></div>`}).join('<div style="height:14px"></div>');
   return `<div class="card"><div class="lr"><div><span class="lbl">本月薪資基數</span><div class="num" style="font-size:26px;font-weight:500">${fmt(a.base)}</div></div>
     <button class="btn s" data-act="allocset">調整比例與對應</button></div>
@@ -569,7 +588,7 @@ function vAlloc(){
     <div class="lr" style="margin-top:12px"><span class="field"><span>手動指定本月基數（留空則用薪資收入）</span><input type="text" inputmode="numeric" id="baseov" value="${st.baseOverride[m]!=null?esc(st.baseOverride[m]):''}" placeholder="例如 55000"></span></div></div>
   ${Math.abs(sumP-1)>.0001?`<div class="banner" role="alert">比例合計是 ${Math.round(sumP*1000)/10}%，不是 100%，請到「調整比例與對應」修正。</div>`:''}
   <div class="card"><h2>各帳戶分配與實際花費</h2>${rowsH}</div>
-  <div class="card"><div class="lr"><span>全部帳戶預算合計</span><span class="num">${fmt(a.rows.reduce((s,r)=>s+r.budget,0))}</span></div><div class="lr" style="margin-top:6px"><span>本月實際支出</span><span class="num exp">${fmt(spent)}</span></div></div>`;
+  <div class="card"><div class="lr"><span>全部帳戶預算合計</span><span class="num">${fmt(a.rows.reduce((s,r)=>s+r.budget+r.carry,0))}</span></div><div class="lr" style="margin-top:6px"><span>本月實際支出</span><span class="num exp">${fmt(spent)}</span></div></div>`;
 }
 function vAcct(){
   const bal=sumByAccount(S.months),st=S.settings;
@@ -590,7 +609,10 @@ function vAcct(){
   const chart=S.hide?'':`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="近十二個月收支長條與淨資產折線圖">${bars}<polyline points="${pts}" fill="none" stroke-width="2" stroke-linejoin="round" style="stroke:var(--net)"/></svg><div class="legend"><span><i style="background:var(--exp)"></i>支出</span><span><i style="background:var(--inc)"></i>收入</span><span><i style="background:var(--net)"></i>總額</span></div>`;
   const groups=groupList().map(n=>[n,accs.filter(a=>grpOf(a)===n&&!a.h)]).concat([['不再使用',accs.filter(a=>a.h)]]).filter(g=>g[0]!=='不再使用'||g[1].length);
   const gH=groups.map(([n,as])=>{const sum=as.reduce((s,a)=>s+bs(a),0),shut=S.shut[n],hid=n==='不再使用';
-    return `<div style="display:flex;align-items:center"><button class="ghead ${shut?'shut':''}" style="flex:1" data-act="gshut" data-g="${esc(n)}" aria-expanded="${!shut}"><span>${esc(n)} (${as.length})</span><span class="num${hide}">${sum<0?'−':'+'}$${fmt(Math.abs(sum))}</span></button>${hid?'':`<button class="ibtn" style="width:34px;height:34px" data-act="acc" data-n="" data-g="${esc(n)}" aria-label="在${esc(n)}新增">${icon('plus')}</button>`}</div>${shut?'':(as.length?as.map(a=>S.sortAcc?`<div class="acrow"><b style="flex:1;font-weight:400;min-width:0">${esc(a.n)}</b><button class="btn s" style="flex:none" data-act="amv2" data-n="${esc(a.n)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" style="flex:none" data-act="amv2" data-n="${esc(a.n)}" data-d="1" aria-label="下移">↓</button></div>`:`<button class="acrow" data-act="acc" data-n="${esc(a.n)}"><span class="aic">${icon(a.k==='stock'?'stats':'acct')}</span><b style="flex:1;font-weight:400;min-width:0">${esc(a.n)}</b><span class="amt${hide} ${bs(a)<0?'exp':'inc'}" style="font-size:18px">${bs(a)<0?'−':''}$${fmt(Math.abs(bs(a)))}</span></button>`).join(''):`<div class="sm muted" style="padding:6px 4px 10px">還沒有項目，按右邊「＋」新增${n==='銀行'?'銀行':n==='信用卡'?'信用卡':n==='股票'?'股票':''}</div>`)}`}).join('');
+    return `<div style="display:flex;align-items:center"><button class="ghead ${shut?'shut':''}" style="flex:1" data-act="gshut" data-g="${esc(n)}" aria-expanded="${!shut}"><span>${esc(n)} (${as.length})</span><span class="num${hide}">${sum<0?'−':'+'}$${fmt(Math.abs(sum))}</span></button>${hid?'':`<button class="ibtn" style="width:34px;height:34px" data-act="acc" data-n="" data-g="${esc(n)}" aria-label="在${esc(n)}新增">${icon('plus')}</button>`}</div>${shut?'':(as.length?as.map(a=>S.sortAcc?`<div class="acrow"><b style="flex:1;font-weight:400;min-width:0">${esc(a.n)}</b><button class="btn s" style="flex:none" data-act="amv2" data-n="${esc(a.n)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" style="flex:none" data-act="amv2" data-n="${esc(a.n)}" data-d="1" aria-label="下移">↓</button></div>`:(()=>{const main=`<button class="acrow" data-act="acc" data-n="${esc(a.n)}"><span class="aic">${icon(a.k==='stock'?'stats':'acct')}</span><b style="flex:1;font-weight:400;min-width:0">${esc(a.n)}</b><span class="amt${hide} ${bs(a)<0?'exp':'inc'}" style="font-size:18px">${bs(a)<0?'−':''}$${fmt(Math.abs(bs(a)))}</span></button>`;if(a.k!=='card'||a.h)return main;const bl=(S.settings.bills[S.month]||{})[a.n]||{},has=bl.amt!==undefined&&bl.amt!==null&&bl.amt!=='',D=has?reconData(a.n,S.month):null,diff=has?(+bl.amt)-D.chkSum:null,pd=has?billPaid(a.n,S.month):0,rm=has?(+bl.amt)-pd:0;
+      const st1=!has?'<span class="muted">還沒填帳單</span>':diff===0?'<span class="inc">核對吻合 ✓</span>':diff>0?`<span class="exp">少記 $${fmt(diff)}</span>`:`<span style="color:var(--warn)">多記 $${fmt(-diff)}</span>`;
+      const st2=has?(bl.paid&&!pd?'已標記繳清':rm<=0?'<span class="inc">已繳清 ✓</span>':'待繳 $'+fmt(rm)):'';
+      return `<div>${main}<div class="lr sm" style="padding:0 4px 10px 62px;gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:0">本期已刷 $${fmt(cardOpen(a).sp)}　${+S.month.slice(5)}月帳單 ${has?'$'+fmt(+bl.amt)+'　':''}${st1}${st2?'　'+st2:''}</span><button class="btn s" style="flex:none" data-act="rcon" data-n="${esc(a.n)}">核對</button><button class="btn s" style="flex:none" data-act="rcpay" data-n="${esc(a.n)}">繳費</button></div></div>`})()).join(''):`<div class="sm muted" style="padding:6px 4px 10px">還沒有項目，按右邊「＋」新增${n==='銀行'?'銀行':n==='信用卡'?'信用卡':n==='股票'?'股票':''}</div>`)}`}).join('');
   const cards=accs.filter(a=>a.k==='card'&&!a.h),bills=(st.bills[S.month]||{});
   const unpaid=cards.reduce((s,a)=>{const b=bills[a.n]||{};return s+(b.paid?0:Math.max(0,(+b.amt||0)-billPaid(a.n,S.month)))},0);
   const cardH=cards.length?`<div class="card"><h2>${mLabel(S.month)}　信用卡帳單核對</h2>
@@ -605,8 +627,11 @@ function vAcct(){
   <div style="text-align:center"><span class="lbl">總額 TWD</span><div class="big-total num${hide} ${total<0?'neg':''}">${total<0?'−':''}${fmt(Math.abs(total))}</div>
   <div class="sm muted" style="margin-top:4px">總資產 <span class="inc${hide}">${fmt(asset)}</span>　總負債 <span class="exp${hide}">${fmt(Math.abs(debt))}</span></div></div>
   <div class="card">${chart||'<div class="muted sm" style="text-align:center">金額已隱藏</div>'}</div>
-  ${loanCardHtml()}
-  <div><div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button class="btn s" data-act="sortacc">${S.sortAcc?'完成排序':'調整順序'}</button></div>${gH||'<div class="card muted">還沒有帳戶</div>'}</div>${cardH}
+  ${(()=>{const B=cardBurden();return `<div class="card"><h2>信用卡要還多少</h2>
+    <div class="lr" style="padding:4px 0"><span>已出帳、還沒繳</span><span class="num exp${hide}">$${fmt(B.billed)}</span></div>
+    <div class="lr" style="padding:4px 0"><span>本期已刷（還沒出帳）</span><span class="num exp${hide}">$${fmt(B.open)}</span></div>
+    <div class="lr" style="padding:8px 0 0;border-top:1px solid var(--line);margin-top:4px"><b style="font-weight:500">接下來要準備</b><b class="num exp${hide}" style="font-size:20px">$${fmt(B.billed+B.open)}</b></div></div>`})()}
+  <div><div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button class="btn s" data-act="sortacc">${S.sortAcc?'完成排序':'調整順序'}</button></div>${gH||'<div class="card muted">還沒有帳戶</div>'}</div>
   <p class="muted sm">餘額＝期初餘額＋所有紀錄加總。與實際不符時，點進帳戶輸入「目前實際餘額」就會自動校正。</p>`;
 }
 const todayStr=()=>nowDate();
@@ -764,6 +789,21 @@ function cardPeriod(m,cd,lag){
   const pm=monthAdd(m,-1),[py,pmo]=pm.split('-').map(Number),c=Math.min(cd,dimOf(y,mo)),pc=Math.min(cd,dimOf(py,pmo)),st=new Date(py,pmo-1,pc+1);
   return[st.getFullYear()+'-'+pad2(st.getMonth()+1)+'-'+pad2(st.getDate()),m+'-'+pad2(c)];
 }
+function cardOpen(a){
+  const t=nowDate(),m0=monthOf(t),dd=+t.slice(8);let m=m0;
+  if(a.cd&&dd>a.cd)m=monthAdd(m0,1);
+  const [ps,pe]=cardPeriod(m,a.cd,false);
+  let sp=0;for(const x of [monthOf(ps),monthOf(pe)])for(const r of recs(x))if(r.ac===a.n&&(r.t==='e'||r.t==='i')&&r.d>=ps&&r.d<=pe)sp-=r.a;
+  return{ps,pe,sp};
+}
+function cardBurden(){
+  const st=S.settings,cards=st.accounts.filter(a=>a.k==='card'&&!a.h);let billed=0,open=0;
+  for(const a of cards){
+    open+=Math.max(0,cardOpen(a).sp);
+    for(const m in st.bills){const b=(st.bills[m]||{})[a.n];if(b&&+b.amt>0&&!b.paid)billed+=Math.max(0,+b.amt-billPaid(a.n,m))}
+  }
+  return{billed,open};
+}
 const billPaid=(card,m)=>allRecs().filter(r=>r.t==='xi'&&r.ac===card&&r.bill===m).reduce((s,r)=>s+r.a,0);
 function cardRecs(card,m,cd){
   const ac=S.settings.accounts.find(x=>x.n===card),[ps,pe]=cardPeriod(m,cd,!(ac&&ac.lag===0)),out=[];
@@ -881,7 +921,7 @@ function loanCardHtml(){
   const active=ls.filter(l=>!loanDone(l)),done=ls.filter(loanDone);
   return `<div class="card"><div class="lr"><h2 style="margin:0">借貸與分期</h2><button class="btn s" style="flex:none" data-act="loanform" data-id="">＋ 新增</button></div>
   ${dues.length?`<div style="margin-top:10px"><div class="lbl">本月到期／逾期</div>${dues.slice(0,6).map(x=>`<div class="lr sm" style="padding:6px 0"><span><b style="font-weight:500">${esc(x.l.name)}</b> 第${x.k}期<br><span class="${x.due<today?'exp':'muted'}">${x.due<today?'還沒記　':'到期　'}${x.due.slice(5).replace('-','/')}</span></span><span class="num${hide}" style="flex:none">$${fmt(x.a)}</span><button class="btn s" style="flex:none" data-act="loanpay" data-id="${esc(x.l.id)}" data-k="${x.k}">${x.l.kind==='out'?'已收':'記入'}</button></div>`).join('')}</div>`:''}
-  ${active.length?`<div style="margin-top:10px">${active.map(l=>{const nx=loanSched(l).find(x=>!x.pay);return `<button class="acrow" style="padding:8px 0" data-act="loanopen" data-id="${esc(l.id)}"><span class="rt" style="flex:1;min-width:0"><b style="font-weight:500;display:block">${esc(l.name)} <span class="tag2">${{out:'借出',in:'借入',inst:'分期'}[l.kind]}</span></b><small style="color:var(--muted)">${l.person?esc(l.person)+' · ':''}${nx?'下次 '+nx.due.slice(5).replace('-','/'):''}${l.sched?' · 剩 '+loanSched(l).filter(x=>!x.pay).length+' 期':''}</small></span><span class="amt${hide} ${l.kind==='out'?'inc':'exp'}">$${fmt(loanRemain(l))}</span></button>`}).join('')}</div>`:'<div class="muted sm" style="margin-top:8px">還沒有借貸或分期。可以記借給別人的錢、你的貸款，或信用卡分期。</div>'}
+  ${active.length?`<div style="margin-top:10px">${active.map(l=>{const nx=loanSched(l).find(x=>!x.pay);return `<button class="acrow" style="padding:8px 0" data-act="loanopen" data-id="${esc(l.id)}"><span class="rt" style="flex:1;min-width:0"><b style="font-weight:500;display:block">${esc(l.name)} <span class="tag2">${{out:'借出',in:'借入',inst:'分期'}[l.kind]}</span></b><small style="color:var(--muted)">${l.person?esc(l.person)+' · ':''}${nx?'下次 '+nx.due.slice(5).replace('-','/'):''}${l.sched?' · 剩 '+loanSched(l).filter(x=>!x.pay||(x.pay.pre&&x.due>nowDate())).length+' 期':''}</small></span><span class="amt${hide} ${l.kind==='out'?'inc':'exp'}">$${fmt(loanRemain(l))}</span></button>`}).join('')}</div>`:'<div class="muted sm" style="margin-top:8px">還沒有借貸或分期。可以記借給別人的錢、你的貸款，或信用卡分期。</div>'}
   ${done.length?`<div class="muted sm" style="margin-top:6px">已結清 ${done.length} 筆（點「新增」旁的項目可在明細查看）</div>`:''}</div>`;
 }
 function loanAutoBook(l){
@@ -895,7 +935,7 @@ function loanAutoBook(l){
 let LF=null;
 function openLoanForm(id){
   const st=S.settings,l=id&&(st.loans||[]).find(x=>x.id===id);
-  LF=l?JSON.parse(JSON.stringify(l)):{id:'',kind:'inst',name:'',person:'',principal:'',sched:null,account:st.lastAcc&&accNames().includes(st.lastAcc)?st.lastAcc:accNames()[0],cat:'貸款',sub:'',pays:[]};
+  LF=l?JSON.parse(JSON.stringify(l)):{id:'',kind:'inst',name:'',person:'',principal:'',sched:null,account:st.lastAcc&&activeNames().includes(st.lastAcc)?st.lastAcc:activeNames()[0],cat:'貸款',sub:'',pays:[]};
   if(LF.sched){LF.periods=LF.sched.periods;LF.per=LF.sched.per;LF.dueDay=LF.sched.dueDay;LF.startMonth=LF.sched.startMonth}else{LF.periods='';LF.per='';LF.dueDay='';LF.startMonth=monthOf(nowDate())}
   drawLoanForm();
 }
@@ -995,7 +1035,7 @@ function render(){
 /* ---------- sheets ---------- */
 function openSheet(html){$('#sheetHost').innerHTML=`<div class="sheetbg" data-act="bg"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`}
 function closeSheet(){$('#sheetHost').innerHTML='';F=null}
-const optsAcc=sel=>accNames().map(n=>`<option ${n===sel?'selected':''}>${esc(n)}</option>`).join('');
+const optsAcc=sel=>S.settings.accounts.filter(a=>!a.h||a.n===sel).map(a=>a.n).map(n=>`<option ${n===sel?'selected':''}>${esc(n)}</option>`).join('');
 
 function openAdd(rec){
   const st=S.settings;
@@ -1005,7 +1045,7 @@ function openAdd(rec){
     if(rec.kind==='x')F={mode:'edit',t:'x',id:rec.id,ids:rec.ids,a:String(rec.a),ac:rec.from,to:rec.to,d:rec.d,tm:rec.tm,n:rec.n||'',p:'',g:rec.g,bill:rec.bill};
     else{const r=rec.r,raw=!(isExp(r)||isInc(r));
       F={mode:'edit',t:raw?'raw':(isInc(r)?'i':'e'),id:r.id,a:raw?String(r.a):String(Math.abs(r.a)),c:r.c,s:r.s,ac:r.ac,d:r.d,tm:r.tm,n:r.n||'',p:r.p||'',o:r.o||'',orig:r}}
-  }else F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:st.lastAcc&&accNames().includes(st.lastAcc)?st.lastAcc:accNames()[0],to:accNames()[1]||accNames()[0],d,tm:'',n:'',p:''};
+  }else F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:st.lastAcc&&activeNames().includes(st.lastAcc)?st.lastAcc:activeNames()[0],to:activeNames()[1]||activeNames()[0],d,tm:'',n:'',p:''};
   drawAdd();
 }
 function drawAdd(){
@@ -1025,7 +1065,7 @@ function drawAdd(){
     h+=`<div class="card" style="background:var(--bg);box-shadow:none"><label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="f-ion" ${I.on?'checked':''}><b style="font-weight:500">這是分期付款</b></label>
     <div class="sm muted" style="margin-top:4px">${I.on?(F.mode==='edit'?'儲存後會刪除這筆一次性支出，改成每期自動記一筆支出到這張卡。':'不會一次記全額，而是每期繳款時才記一筆支出到這張卡，方便和帳單核對。'):'勾選後可以設定期數，每期自動入帳。'}</div>
     ${I.on?`<div class="grid2" style="margin-top:10px"><label class="field"><span>總期數</span><input type="text" id="f-ip" inputmode="numeric" value="${esc(I.periods)}" placeholder="例如 12"></label><label class="field"><span>每期金額（留空自動平分）</span><input type="text" id="f-iper" inputmode="numeric" value="${esc(I.per)}" placeholder="${F.a&&I.periods?Math.ceil(parseFloat(F.a)/parseInt(I.periods)||0)||'':''}"></label><label class="field"><span>第 1 期月份</span><input type="month" id="f-ism" value="${esc(I.startMonth)}"></label><label class="field"><span>每月幾號</span><input type="text" id="f-idd" inputmode="numeric" value="${esc(I.dueDay)}"></label></div>`:''}</div>`}
-  h+=`<div class="grid2"><label class="field"><span>日期</span><input type="date" id="f-d" value="${esc(F.d)}"></label><label class="field"><span>專案（選填）</span><input type="text" id="f-p" list="projs" value="${esc(F.p||'')}"><datalist id="projs">${projs.map(p=>`<option value="${esc(p)}">`).join('')}</datalist></label></div>
+  h+=`<div class="grid2"><label class="field"><span>日期</span><input type="date" id="f-d" value="${esc(F.d)}"></label>${F.t==='x'?'':`<label class="field"><span>專案（選填）</span><input type="text" id="f-p" list="projs" value="${esc(F.p||'')}"><datalist id="projs">${projs.map(p=>`<option value="${esc(p)}">`).join('')}</datalist></label>`}</div>
   <label class="field"><span>備註</span><input type="text" id="f-n" value="${esc(F.n)}" placeholder="例如：和朋友吃晚餐"></label>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" style="flex:1" data-act="fsave">儲存</button>${F.mode==='add'&&!(RC&&RC.back)?'<button class="btn" data-act="fsave" data-again="1">儲存並再記一筆</button>':'<button class="btn d" data-act="fdel">刪除</button>'}</div>`;
   openSheet(h);
@@ -1114,7 +1154,7 @@ function saveAcc(){
 /* ---------- allocation settings sheet ---------- */
 let AL=null;
 function openAllocSet(){
-  const st=S.settings;AL={ratios:Object.entries(st.ratios).map(([k,p])=>[k,Math.round(p*1000)/10]),map:{...st.bucketMap},pmap:{...(st.projectMap||{})},salary:st.salarySubs.join('、'),bonus:st.incBonus};
+  const st=S.settings;const rf=ratiosFor(st,S.month);AL={ratios:Object.entries(rf.r).map(([k,p])=>[k,Math.round(p*1000)/10,!!rf.c[k]]),map:{...st.bucketMap},pmap:{...(st.projectMap||{})},salary:st.salarySubs.join('、'),bonus:st.incBonus};
   drawAlloc();
 }
 function drawAlloc(){
@@ -1123,8 +1163,9 @@ function drawAlloc(){
   const cats=Object.entries(st.cats.e);
   openSheet(`<div class="shd"><h3>薪資分配設定</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><h2>分配比例　<span class="num ${Math.abs(sum-100)>.01?'exp':'inc'}">${Math.round(sum*10)/10}%</span></h2>
-   ${AL.ratios.map((r,i)=>`<div class="lr" style="margin-bottom:8px"><input type="text" data-rn="${i}" value="${esc(r[0])}" aria-label="帳戶名稱" style="min-width:0"><input type="text" class="pct" style="width:64px!important" inputmode="decimal" data-rp="${i}" value="${r[1]}" aria-label="比例"><span class="muted">%</span><span class="mv"><button class="btn s" data-act="rmv" data-i="${i}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="rmv" data-i="${i}" data-d="1" aria-label="下移">↓</button></span><button class="ibtn" data-act="rdel" data-i="${i}" aria-label="刪除">${icon('x')}</button></div>`).join('')}
-   <button class="btn s" data-act="radd">新增分配帳戶</button></div>
+   ${AL.ratios.map((r,i)=>`<div class="lr" style="margin-bottom:8px"><input type="text" data-rn="${i}" value="${esc(r[0])}" aria-label="帳戶名稱" style="min-width:0"><input type="text" class="pct" style="width:64px!important" inputmode="decimal" data-rp="${i}" value="${r[1]}" aria-label="比例"><span class="muted">%</span><span class="mv"><button class="btn s" data-act="rmv" data-i="${i}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="rmv" data-i="${i}" data-d="1" aria-label="下移">↓</button></span><button class="ibtn" data-act="rdel" data-i="${i}" aria-label="刪除">${icon('x')}</button></div><label class="sm" style="display:flex;gap:8px;align-items:center;margin:-2px 0 12px 4px"><input type="checkbox" data-rc="${i}" ${r[2]?'checked':''}>結餘滾入下月</label>`).join('')}
+   <button class="btn s" data-act="radd">新增分配帳戶</button>
+   <p class="muted sm" style="margin:10px 0 0">修改後從「${mLabel(S.month)}」開始生效，之前月份維持當時的設定。勾選「結餘滾入下月」的專案，沒花完（或超支）的錢會帶到下個月。</p></div>
   <div class="card"><h2>薪資基數</h2><label class="field"><span>哪些收入子分類算薪資（用頓號分隔）</span><input type="text" id="al-sal" value="${esc(AL.salary)}"></label>
    <label class="sm" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="al-bonus" ${AL.bonus?'checked':''}>把「獎金」也算進基數</label></div>
   <div class="card"><h2>專案對應（優先）</h2><p class="muted sm" style="margin:0 0 10px">記帳時填的「專案」會優先決定算進哪個帳戶，沒有專案才看下面的分類。</p>
@@ -1137,6 +1178,7 @@ function drawAlloc(){
 function syncAL(){
   document.querySelectorAll('[data-rn]').forEach(i=>AL.ratios[+i.dataset.rn][0]=i.value.trim());
   document.querySelectorAll('[data-rp]').forEach(i=>AL.ratios[+i.dataset.rp][1]=parseFloat(i.value)||0);
+  document.querySelectorAll('[data-rc]').forEach(i=>AL.ratios[+i.dataset.rc][2]=i.checked);
   document.querySelectorAll('[data-map]').forEach(i=>{if(i.value)AL.map[i.dataset.map]=i.value;else delete AL.map[i.dataset.map]});
   document.querySelectorAll('[data-pmap]').forEach(i=>{if(i.value)AL.pmap[i.dataset.pmap]=i.value;else delete AL.pmap[i.dataset.pmap]});
   const dsel=$('#al-def');if(dsel)AL.def=dsel.value;
@@ -1148,7 +1190,12 @@ function saveAlloc(){
   if(!Object.keys(r).length){toast('至少要有一個分配帳戶');return}
   const sum=Object.values(r).reduce((s,x)=>s+x,0);
   if(Math.abs(sum-1)>.0001){toast('比例合計需要是 100%');return}
-  st.ratios=r;st.projectMap=Object.fromEntries(Object.entries(AL.pmap).filter(([,v])=>r[v]));if(AL.def&&r[AL.def])st.defaultBucket=AL.def;st.bucketMap=Object.fromEntries(Object.entries(AL.map).filter(([,v])=>r[v]));
+  const cc={};for(const [k,p,c] of AL.ratios)if(k&&c)cc[k]=true;
+  st.ratioHist=st.ratioHist||{};
+  if(!Object.keys(st.ratioHist).length)st.ratioHist['0000-00']={r:Object.entries(st.ratios),c:st.carry||{}};
+  st.ratioHist[S.month]={r:AL.ratios.filter(x=>x[0]).map(([k,p])=>[k,p/100]),c:cc};
+  {const lt=ratiosFor(st,'9999-99');st.ratios=lt.r;st.carry=lt.c}
+  st.projectMap=Object.fromEntries(Object.entries(AL.pmap).filter(([,v])=>r[v]));if(AL.def&&r[AL.def])st.defaultBucket=AL.def;st.bucketMap=Object.fromEntries(Object.entries(AL.map).filter(([,v])=>r[v]));
   st.salarySubs=AL.salary.split(/[、,，\s]+/).filter(Boolean);st.incBonus=AL.bonus;
   commitSettings();closeSheet();render();toast('已儲存');
 }
@@ -1252,11 +1299,11 @@ const ACTS={
   rcdone:()=>{closeSheet();RC=null;toast('核對完成 ✓')},
   rcchk:t=>{const st=S.settings,bills=st.bills[S.month]||(st.bills[S.month]={}),b=bills[RC.card]||(bills[RC.card]={}),off=t.dataset.x?(b.inc||(b.inc=[])):(b.off||(b.off=[])),id=t.dataset.id,i=off.indexOf(id);if(i>=0)off.splice(i,1);else off.push(id);commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
   rcedit:t=>{RC.back=true;ACTS.edit({dataset:{id:t.dataset.id}})},
-  rcnew:()=>{RC.back=true;closeSheet();const _a=S.settings.accounts.find(x=>x.n===RC.card),pe=cardPeriod(S.month,_a.cd,_a.lag!==0)[1],d=pe<nowDate()?pe:nowDate();F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'',p:''};drawAdd()},
-  rcfill:()=>{const D=reconData(RC.card,S.month),diff=(+D.bm.amt)-D.chkSum;if(!(diff>0))return;RC.back=true;closeSheet();const d=D.pe<nowDate()?D.pe:nowDate();F={mode:'add',t:'e',id:'',a:String(diff),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'帳單差額補記',p:''};drawAdd()},
+  rcnew:()=>{RC.back=true;closeSheet();const _a=S.settings.accounts.find(x=>x.n===RC.card),pe=cardPeriod(S.month,_a.cd,_a.lag!==0)[1],d=pe<nowDate()?pe:nowDate();F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:RC.card,to:activeNames()[1]||RC.card,d,tm:'',n:'',p:''};drawAdd()},
+  rcfill:()=>{const D=reconData(RC.card,S.month),diff=(+D.bm.amt)-D.chkSum;if(!(diff>0))return;RC.back=true;closeSheet();const d=D.pe<nowDate()?D.pe:nowDate();F={mode:'add',t:'e',id:'',a:String(diff),c:'',s:'',ac:RC.card,to:activeNames()[1]||RC.card,d,tm:'',n:'帳單差額補記',p:''};drawAdd()},
   rcrun:()=>rcSave(),
   rcadd:t=>{const D=reconData(RC.card,S.month),it=D.R&&D.R.missing[+t.dataset.i];if(!it)return;
-    closeSheet();F={mode:'add',t:'e',id:'',a:String(it.a),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d:it.d,tm:'',n:it.n,p:''};drawAdd()},
+    closeSheet();F={mode:'add',t:'e',id:'',a:String(it.a),c:'',s:'',ac:RC.card,to:activeNames()[1]||RC.card,d:it.d,tm:'',n:it.n,p:''};drawAdd()},
   loanform:t=>openLoanForm(t.dataset.id),
   lkind:t=>{syncLF();LF.kind=t.dataset.v;drawLoanForm()},
   lsave:()=>saveLoan(),
@@ -1294,7 +1341,7 @@ const ACTS={
   gdel:t=>{const n=t.dataset.g;if(S.settings.accounts.some(a=>grpOf(a)===n)){toast('分組裡還有項目，請先移走');return}S.settings.groups=S.settings.groups.filter(x=>x!==n);commitSettings();openSettings();render()},
   accsave:()=>saveAcc(),
   allocset:()=>openAllocSet(),
-  radd:()=>{syncAL();AL.ratios.push(['',0]);drawAlloc()},
+  radd:()=>{syncAL();AL.ratios.push(['',0,false]);drawAlloc()},
   rdel:t=>{syncAL();AL.ratios.splice(+t.dataset.i,1);drawAlloc()},
   alsave:()=>saveAlloc(),
   expcsv:()=>download('記帳匯出.csv',toMozeCSV(S.months)),
