@@ -863,7 +863,7 @@ function loanSched(l){
 }
 function loanRemain(l){
   const ps=(l.pays||[]).reduce((s,p)=>s+p.a,0);
-  if(l.sched&&l.kind!=='out')return Math.max(0,loanSched(l).filter(x=>!x.pay).reduce((s,x)=>s+x.a,0));
+  if(l.sched&&l.kind!=='out'){const td=nowDate();return Math.max(0,loanSched(l).filter(x=>!x.pay||(x.pay.pre&&x.due>td)).reduce((s,x)=>s+x.a,0))}
   return Math.max(0,l.principal-ps);
 }
 const loanDone=l=>loanRemain(l)<=0;
@@ -879,6 +879,14 @@ function loanCardHtml(){
   ${dues.length?`<div style="margin-top:10px"><div class="lbl">本月到期／逾期</div>${dues.slice(0,6).map(x=>`<div class="lr sm" style="padding:6px 0"><span><b style="font-weight:500">${esc(x.l.name)}</b> 第${x.k}期<br><span class="${x.due<today?'exp':'muted'}">${x.due<today?'逾期　':'到期　'}${x.due.slice(5).replace('-','/')}</span></span><span class="num${hide}" style="flex:none">$${fmt(x.a)}</span><button class="btn s" style="flex:none" data-act="loanpay" data-id="${esc(x.l.id)}" data-k="${x.k}">${x.l.kind==='out'?'已收':'已繳'}</button></div>`).join('')}</div>`:''}
   ${active.length?`<div style="margin-top:10px">${active.map(l=>{const nx=loanSched(l).find(x=>!x.pay);return `<button class="acrow" style="padding:8px 0" data-act="loanopen" data-id="${esc(l.id)}"><span class="rt" style="flex:1;min-width:0"><b style="font-weight:500;display:block">${esc(l.name)} <span class="tag2">${{out:'借出',in:'借入',inst:'分期'}[l.kind]}</span></b><small style="color:var(--muted)">${l.person?esc(l.person)+' · ':''}${nx?'下次 '+nx.due.slice(5).replace('-','/'):''}${l.sched?' · 剩 '+loanSched(l).filter(x=>!x.pay).length+' 期':''}</small></span><span class="amt${hide} ${l.kind==='out'?'inc':'exp'}">$${fmt(loanRemain(l))}</span></button>`}).join('')}</div>`:'<div class="muted sm" style="margin-top:8px">還沒有借貸或分期。可以記借給別人的錢、你的貸款，或信用卡分期。</div>'}
   ${done.length?`<div class="muted sm" style="margin-top:6px">已結清 ${done.length} 筆（點「新增」旁的項目可在明細查看）</div>`:''}</div>`;
+}
+function loanAutoBook(l){
+  const st=S.settings,touched=new Set();let c=0;
+  for(const x of loanSched(l)){if(x.pay)continue;
+    const rid=uid(),r={id:rid,t:'e',a:-x.a,c:l.cat||'貸款',s:l.sub||'',ac:l.account,d:x.due,tm:'',n:`${l.name} 第${x.k}期`,p:l.p||'',o:'',lid:l.id};
+    const m=monthOf(x.due);(S.months[m]||(S.months[m]=[])).push(r);touched.add(m);
+    (l.pays=l.pays||[]).push({id:uid(),d:x.due,a:x.a,k:x.k,rid,pre:true});c++}
+  touched.forEach(commitMonth);return c;
 }
 let LF=null;
 function openLoanForm(id){
@@ -900,6 +908,7 @@ function drawLoanForm(){
   <div class="grid2"><label class="field"><span>${k==='inst'?'分期總金額（有填每期金額會自動算）':'本金'}</span><input type="text" id="lf-pr" inputmode="numeric" value="${esc(LF.principal)}"></label>
   <label class="field"><span>${k==='out'?'對方還款入帳帳戶':k==='in'?'從哪個帳戶還款':'分期的信用卡'}</span><select id="lf-ac">${optsAcc(LF.account)}</select></label></div>
   <div class="card" style="background:var(--bg);box-shadow:none"><b class="sm" style="font-weight:500">固定每期還款（選填）</b><div class="grid2" style="margin-top:8px"><label class="field"><span>總期數</span><input type="text" id="lf-pe" inputmode="numeric" value="${esc(LF.periods)}"></label><label class="field"><span>每期金額</span><input type="text" id="lf-per" inputmode="numeric" value="${esc(LF.per)}"></label><label class="field"><span>每月幾號</span><input type="text" id="lf-dd" inputmode="numeric" value="${esc(LF.dueDay)}"></label><label class="field"><span>第 1 期月份</span><input type="month" id="lf-sm" value="${esc(LF.startMonth)}"></label></div><div class="sm muted" style="margin-top:6px">不填的話，就是不固定金額，還款時再自己登記。</div></div>
+  ${k!=='out'&&!LF.id?`<label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="lf-auto" checked><span>有填期數與每期金額時，自動把每一期記到對應月份的帳（含未來月份）</span></label>`:''}
   ${k!=='out'?`<div class="grid2"><label class="field"><span>記帳分類</span><select id="lf-cat">${cats.map(c=>`<option ${c===LF.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label class="field"><span>子分類（選填）</span><input type="text" id="lf-sub" value="${esc(LF.sub||(k==='inst'?'分期':'還款'))}"></label></div>`:''}
   <button class="btn p" data-act="lsave">儲存</button>`);
 }
@@ -914,15 +923,17 @@ function saveLoan0(){
   if(!(pr>0)){toast('請輸入金額');return}
   const l={id:LF.id||uid(),kind:LF.kind,name:LF.name.trim(),person:(LF.person||'').trim(),principal:pr,sched,account:LF.account,cat:LF.cat||'貸款',sub:LF.sub||'',p:LF.p||'',pays:LF.pays||[]};
   st.loans=st.loans||[];const i=st.loans.findIndex(x=>x.id===l.id);if(i>=0)st.loans[i]=l;else st.loans.push(l);
-  st.lastAcc=l.account;commitSettings();closeSheet();render();toast('已儲存');
+  const au=document.getElementById('lf-auto'),isNew=!LF.id;let n=0;
+  if(isNew&&au&&au.checked&&l.sched&&l.kind!=='out')n=loanAutoBook(l);
+  st.lastAcc=l.account;commitSettings();closeSheet();render();toast(n?'已儲存，並自動記了 '+n+' 期':'已儲存');
 }
 function openLoan(id){
   const l=S.settings.loans.find(x=>x.id===id);if(!l)return;const sc=loanSched(l),hide=S.hide?' blur':'',today=nowDate();
   openSheet(`<div class="shd"><h3>${esc(l.name)}</h3><button class="btn s" style="flex:none;margin-left:auto;margin-right:8px" data-act="loanform" data-id="${esc(l.id)}">編輯</button><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><div class="lbl">${l.kind==='out'?'對方還欠你':'還剩'}</div><div class="big-total num${hide}" style="text-align:left;color:var(--ink)">$${fmt(loanRemain(l))}</div>
   <div class="sm muted">${LK[l.kind]}${l.person?' · '+esc(l.person):''} · 本金 $${fmt(l.principal)}${loanDone(l)?' · 已結清 ✓':''}</div></div>
-  ${sc.length&&l.kind!=='out'&&sc.some(x=>!x.pay)?`<div class="card"><b class="sm" style="font-weight:500">已經繳過的期數？</b><div class="sm muted">一次標記前幾期已繳（不會新增記帳，因為你當時已經記過了）</div><div class="grid2" style="margin-top:8px;align-items:end"><label class="field"><span>前幾期已繳</span><input type="text" id="lb-n" inputmode="numeric" placeholder="例如 3"></label><button class="btn s" data-act="lbulk" data-id="${esc(l.id)}">標記</button></div></div>`:''}
-  ${sc.length?`<div class="card"><h2>還款時程</h2>${sc.map(x=>`<div class="lr sm" style="padding:5px 0"><span>第${x.k}期　${x.due.slice(5).replace('-','/')}</span><span class="num" style="flex:none">$${fmt(x.a)}</span>${x.pay?`<span class="inc" style="flex:none">已${l.kind==='out'?'收':'繳'} ✓</span>`:`<button class="btn s ${x.due<today?'d':''}" style="flex:none" data-act="loanpay" data-id="${esc(l.id)}" data-k="${x.k}">${x.due<today?'逾期·':''}${l.kind==='out'?'登記收款':'登記繳款'}</button>`}</div>`).join('')}</div>`:''}
+  ${sc.length&&l.kind!=='out'&&sc.some(x=>!x.pay)?`<button class="btn" data-act="lauto" data-id="${esc(l.id)}">把沒記過的 ${sc.filter(x=>!x.pay).length} 期全部自動記帳（依各期日期）</button><div class="card"><b class="sm" style="font-weight:500">已經繳過的期數？</b><div class="sm muted">一次標記前幾期已繳（不會新增記帳，因為你當時已經記過了）</div><div class="grid2" style="margin-top:8px;align-items:end"><label class="field"><span>前幾期已繳</span><input type="text" id="lb-n" inputmode="numeric" placeholder="例如 3"></label><button class="btn s" data-act="lbulk" data-id="${esc(l.id)}">標記</button></div></div>`:''}
+  ${sc.length?`<div class="card"><h2>還款時程</h2>${sc.map(x=>`<div class="lr sm" style="padding:5px 0"><span>第${x.k}期　${x.due.slice(5).replace('-','/')}</span><span class="num" style="flex:none">$${fmt(x.a)}</span>${x.pay?`<span class="${x.pay.pre&&x.due>today?'muted':'inc'}" style="flex:none">${x.pay.pre&&x.due>today?'已預記 ✓':'已'+(l.kind==='out'?'收':'繳')+' ✓'}</span>`:`<button class="btn s ${x.due<today?'d':''}" style="flex:none" data-act="loanpay" data-id="${esc(l.id)}" data-k="${x.k}">${x.due<today?'逾期·':''}${l.kind==='out'?'登記收款':'登記繳款'}</button>`}</div>`).join('')}</div>`:''}
   <div class="card"><div class="lr"><h2 style="margin:0">${l.kind==='out'?'收款':'繳款'}紀錄</h2><button class="btn s" style="flex:none" data-act="loanpay" data-id="${esc(l.id)}" data-k="">＋ 登記${l.sched?'額外':''}</button></div>
   ${(l.pays||[]).length?[...l.pays].sort((a,b)=>b.d.localeCompare(a.d)).map(p=>`<div class="lr sm" style="padding:5px 0"><span>${p.d.slice(5).replace('-','/')}${p.k?' 第'+p.k+'期':''}</span><span class="num" style="flex:none">$${fmt(p.a)}</span><button class="btn s" style="flex:none" data-act="lundo" data-id="${esc(l.id)}" data-pid="${esc(p.id)}">撤銷</button></div>`).join(''):'<div class="muted sm" style="margin-top:6px">還沒有紀錄</div>'}</div>
   <div style="display:flex;gap:8px"><button class="btn" style="flex:1" data-act="loanform" data-id="${esc(l.id)}">編輯</button><button class="btn d" style="flex:1" data-act="ldel" data-id="${esc(l.id)}">刪除</button></div>
@@ -934,7 +945,7 @@ function openLoanPay(id,k){
   LP={id,k:kk};
   openSheet(`<div class="shd"><h3>${l.kind==='out'?'登記收款':'登記繳款'}　${esc(l.name)}${kk?' 第'+kk+'期':''}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="lp-book" checked><span>同時自動記一筆${l.kind==='out'?'收入':'支出'}（已經自己記過就取消勾選）</span></label>
-  <div class="grid2"><label class="field"><span>金額</span><input type="text" id="lp-a" inputmode="numeric" class="num" value="${x?x.a:Math.min(loanRemain(l),l.sched?l.sched.per:loanRemain(l))}"></label><label class="field"><span>日期</span><input type="date" id="lp-d" value="${nowDate()}"></label></div>
+  <div class="grid2"><label class="field"><span>金額</span><input type="text" id="lp-a" inputmode="numeric" class="num" value="${x?x.a:Math.min(loanRemain(l),l.sched?l.sched.per:loanRemain(l))}"></label><label class="field"><span>日期</span><input type="date" id="lp-d" value="${x?x.due:nowDate()}"></label></div>
   <label class="field"><span>${l.kind==='out'?'入帳帳戶':'帳戶'}</span><select id="lp-ac">${optsAcc(l.account)}</select></label>
   <button class="btn p" data-act="lpsave">儲存並記帳</button>`);
 }
@@ -1012,7 +1023,7 @@ function drawAdd(){
     ${I.on?`<div class="grid2" style="margin-top:10px"><label class="field"><span>總期數</span><input type="text" id="f-ip" inputmode="numeric" value="${esc(I.periods)}" placeholder="例如 12"></label><label class="field"><span>每期金額（留空自動平分）</span><input type="text" id="f-iper" inputmode="numeric" value="${esc(I.per)}" placeholder="${F.a&&I.periods?Math.ceil(parseFloat(F.a)/parseInt(I.periods)||0)||'':''}"></label><label class="field"><span>第 1 期月份</span><input type="month" id="f-ism" value="${esc(I.startMonth)}"></label><label class="field"><span>每月幾號</span><input type="text" id="f-idd" inputmode="numeric" value="${esc(I.dueDay)}"></label></div>`:''}</div>`}
   h+=`<div class="grid2"><label class="field"><span>日期</span><input type="date" id="f-d" value="${esc(F.d)}"></label><label class="field"><span>專案（選填）</span><input type="text" id="f-p" list="projs" value="${esc(F.p||'')}"><datalist id="projs">${projs.map(p=>`<option value="${esc(p)}">`).join('')}</datalist></label></div>
   <label class="field"><span>備註</span><input type="text" id="f-n" value="${esc(F.n)}" placeholder="例如：和朋友吃晚餐"></label>
-  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" style="flex:1" data-act="fsave">儲存</button>${F.mode==='add'?'<button class="btn" data-act="fsave" data-again="1">儲存並再記一筆</button>':'<button class="btn d" data-act="fdel">刪除</button>'}</div>`;
+  <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" style="flex:1" data-act="fsave">儲存</button>${F.mode==='add'&&!(RC&&RC.back)?'<button class="btn" data-act="fsave" data-again="1">儲存並再記一筆</button>':'<button class="btn d" data-act="fdel">刪除</button>'}</div>`;
   openSheet(h);
 }
 function saveRec(again){
@@ -1044,7 +1055,10 @@ function saveRec(again){
   const keepT=F.t,keepAc=F.ac,keepTo=F.to,d=F.d;
   if(!(RC&&RC.back))S.month=monthOf(F.d);
   if(again){F={mode:'add',t:keepT,id:'',a:'',c:'',s:'',ac:keepAc,to:keepTo,d,tm:'',n:'',p:''};drawAdd();toast('已儲存')}
-  else{closeSheet();toast('已儲存');if(RC&&RC.back){RC.back=false;render();drawRecon();return}}
+  else{closeSheet();toast('已儲存');if(RC&&RC.back){RC.back=false;render();drawRecon();
+    const a0=S.settings.accounts.find(x=>x.n===RC.card),[p0,p1]=cardPeriod(S.month,a0.cd);
+    if(keepAc!==RC.card||d<p0||d>p1)setTimeout(()=>toast('這筆不在這張卡這期（'+p0.slice(5)+'～'+p1.slice(5)+'）的帳單內，所以沒列入核對'),300);
+    return}}
   render();
 }
 function deleteRec(){
@@ -1233,6 +1247,7 @@ const ACTS={
   loanform:t=>openLoanForm(t.dataset.id),
   lkind:t=>{syncLF();LF.kind=t.dataset.v;drawLoanForm()},
   lsave:()=>saveLoan(),
+  lauto:t=>{const l=S.settings.loans.find(x=>x.id===t.dataset.id),n=loanAutoBook(l);commitSettings();render();openLoan(l.id);toast('已自動記了 '+n+' 期')},
   lbulk:t=>{const l=S.settings.loans.find(x=>x.id===t.dataset.id),n=parseInt($('#lb-n').value);if(!(n>0)){toast('請輸入期數');return}let c=0;for(const x of loanSched(l)){if(x.k>n)break;if(!x.pay){(l.pays=l.pays||[]).push({id:uid(),d:x.due,a:x.a,k:x.k,rid:null});c++}}commitSettings();render();openLoan(l.id);toast('已標記 '+c+' 期')},
   loanopen:t=>openLoan(t.dataset.id),
   loanpay:t=>openLoanPay(t.dataset.id,t.dataset.k),
