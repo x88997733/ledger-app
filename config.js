@@ -1,2 +1,2 @@
-// 填入 Supabase 專案的 Project URL 與 anon public key（公開金鑰，可放前端）
-window.LEDGER_CONFIG={url:"YOUR_SUPABASE_URL",anonKey:"YOUR_SUPABASE_ANON_KEY"};
+// Supabase 公開金鑰（可放前端；資料靠 RLS 保護）
+window.LEDGER_CONFIG={url:"https://bkoifruqixrrssopivyx.supabase.co",anonKey:"sb_publishable_rznlz_sSW-ymsZUp2enM3w_qqb5cUHw"};
