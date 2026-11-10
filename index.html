@@ -903,9 +903,11 @@ function drawLoanForm(){
   ${k!=='out'?`<div class="grid2"><label class="field"><span>記帳分類</span><select id="lf-cat">${cats.map(c=>`<option ${c===LF.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label class="field"><span>子分類（選填）</span><input type="text" id="lf-sub" value="${esc(LF.sub||(k==='inst'?'分期':'還款'))}"></label></div>`:''}
   <button class="btn p" data-act="lsave">儲存</button>`);
 }
-function saveLoan(){
+function saveLoan(){try{saveLoan0()}catch(e){toast('儲存失敗：'+e.message)}}
+function saveLoan0(){
   syncLF();const st=S.settings,num=v=>parseFloat(String(v).replace(/,/g,''));
-  const pe=parseInt(LF.periods),per=num(LF.per),dd=parseInt(LF.dueDay);let pr=num(LF.principal);
+  const pe=parseInt(LF.periods),dd=parseInt(LF.dueDay);let pr=num(LF.principal),per=num(LF.per);
+  if(!(per>0)&&pe>0&&pr>0)per=Math.round(pr/pe*100)/100;
   if(!LF.name.trim()){toast('請輸入名稱');return}
   const sched=pe>0&&per>0&&dd>0&&dd<=31&&LF.startMonth?{periods:pe,per,dueDay:dd,startMonth:LF.startMonth}:null;
   if(sched&&LF.kind==='inst'){if(pr>0&&Math.abs(pr-pe*per)>1)toast('分期總額已改為 期數×每期金額 = $'+fmt(pe*per));pr=pe*per}
