@@ -154,6 +154,15 @@ details>div{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
 .blur{filter:blur(7px);user-select:none}
 .legend{display:flex;gap:14px;justify-content:center;font-size:12.5px;color:var(--muted)}
 .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.lr select{width:auto;flex:0 1 54%;min-width:0}
+.lr>span:first-child{flex:1 1 38%;overflow-wrap:anywhere}
+textarea{width:100%;border:0;border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);padding:10px 12px;font:inherit;color:inherit;resize:none;min-height:46px}
+.mv{display:flex;gap:4px;flex:none}.mv .btn{min-width:38px;padding:4px 8px;min-height:34px}
+.chat{display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow:auto;padding:2px}
+.bub{padding:9px 13px;border-radius:16px;max-width:88%;white-space:pre-wrap;overflow-wrap:anywhere}
+.bub.u{align-self:flex-end;background:var(--accent);color:var(--on-accent)}
+.bub.a{align-self:flex-start;background:var(--surface);box-shadow:var(--shadow)}
+.prop{align-self:stretch;background:var(--accent-soft);border-radius:16px;padding:12px}
 </style></head><body>
 <div id="login" hidden></div>
 <div id="app">
@@ -307,10 +316,15 @@ const drain=()=>new Promise(res=>{const t=setInterval(()=>{if(!pend.size&&!pumpi
 function setSave(){const el=document.getElementById('saveState');if(!el)return;
   el.textContent=pumping||pend.size?'儲存中…':S.mode==='local'?'未登入：資料只存在這個瀏覽器':S.ready?'已同步到雲端 · '+(USER&&USER.email||''):''}
 const commitMonth=m=>persist('m_'+m,{records:S.months[m]||[]});
-const commitSettings=()=>persist('settings',{settings:S.settings});
+function normOrder(st){
+  const ro=st.ratioOrder;if(Array.isArray(ro)){const o={};ro.forEach(k=>{if(st.ratios[k]!==undefined)o[k]=st.ratios[k]});Object.keys(st.ratios).forEach(k=>{if(o[k]===undefined)o[k]=st.ratios[k]});st.ratios=o}
+  const co=st.catOrder;if(co)['e','i'].forEach(t=>{const a=co[t];if(!Array.isArray(a))return;const o={};a.forEach(k=>{if(st.cats[t][k])o[k]=st.cats[t][k]});Object.keys(st.cats[t]).forEach(k=>{if(!o[k])o[k]=st.cats[t][k]});st.cats[t]=o})}
+const moveKey=(o,k,d)=>{const ks=Object.keys(o),i=ks.indexOf(k),j=i+d;if(i<0||j<0||j>=ks.length)return o;[ks[i],ks[j]]=[ks[j],ks[i]];const n={};ks.forEach(x=>n[x]=o[x]);return n};
+const moveIdx=(a,i,d)=>{const j=i+d;if(i<0||j<0||j>=a.length)return;[a[i],a[j]]=[a[j],a[i]]};
+const commitSettings=()=>{const st=S.settings;st.ratioOrder=Object.keys(st.ratios);st.catOrder={e:Object.keys(st.cats.e),i:Object.keys(st.cats.i)};persist('settings',{settings:st})};
 function applyDoc(id,data){
   if(pend.has(id)||flying.has(id))return;
-  if(id==='settings'&&data&&data.settings)S.settings=Object.assign(DEFAULTS(),data.settings);
+  if(id==='settings'&&data&&data.settings){S.settings=Object.assign(DEFAULTS(),data.settings);normOrder(S.settings)}
   else if(id.startsWith('m_')&&data&&Array.isArray(data.records))S.months[id.slice(2)]=data.records;
 }
 function showLogin(msg){
@@ -636,9 +650,66 @@ function assistIssues(){
   if(big.length)out.push({lvl:1,t:'有幾筆金額比平常大很多',d:'確認金額有沒有多打一個零。',list:big.map(r=>`${r.d.slice(5).replace('-','/')} ${r.c}${r.s?'·'+r.s:''} −${fmt(-r.a)}`)});
   return out.sort((a,b)=>b.lvl-a.lvl);
 }
+function chatContext(){
+  const st=S.settings,pc=k=>Math.round(st.ratios[k]*1000)/10,months=[];
+  for(let i=0;i<3;i++){const m=monthAdd(S.month,-i),mr=recs(m),a=allocation(mr,st,m),t=monthTotals(mr);
+    months.push({月份:m,支出:Math.round(t.e),收入:Math.round(t.i),薪資基數:a.base,各帳戶:Object.fromEntries(a.rows.map(r=>[r.k,{預算:r.budget,實際花費:Math.round(r.spent)}]))})}
+  const topByBucket={};recs(S.month).filter(r=>r.t==='e').forEach(r=>{const b=bucketOf(r,st),k=r.c+(r.s?'/'+r.s:'');const o=topByBucket[b]||(topByBucket[b]={});o[k]=Math.round((o[k]||0)-r.a)});
+  Object.keys(topByBucket).forEach(b=>{topByBucket[b]=Object.fromEntries(Object.entries(topByBucket[b]).sort((a,b)=>b[1]-a[1]).slice(0,5))});
+  return{目前月份:S.month,分配比例百分比:Object.fromEntries(Object.keys(st.ratios).map(k=>[k,pc(k)])),專案對應:st.projectMap||{},分類對應:st.bucketMap||{},預設帳戶:st.defaultBucket,最近三個月:months,本月各帳戶主要花費:topByBucket};
+}
+function propDesc(p){
+  const st=S.settings,i=p.input||{};
+  if(p.name==='set_ratios')return Object.entries(i.ratios||{}).map(([k,v])=>`${k}　${st.ratios[k]!==undefined?Math.round(st.ratios[k]*1000)/10+'% → ':'（新）'}${v}%`).join('\n')+(Object.keys(st.ratios).filter(k=>!(k in(i.ratios||{}))).map(k=>`\n${k}　${Math.round(st.ratios[k]*1000)/10}% → 移除`).join(''));
+  const cur=p.name==='set_project_map'?(st.projectMap||{}):(st.bucketMap||{});
+  return Object.entries(i.map||{}).map(([k,v])=>`${k}　${cur[k]||'（無）'} → ${v||'取消對應'}`).join('\n');
+}
+function proposalApply(mi,pi,ok){
+  const msg=S.chat[mi],p=msg&&msg.props&&msg.props[pi];if(!p||p.state!=='new')return;
+  if(!ok){p.state='skip';drawChat();return}
+  const st=S.settings,i=p.input||{};let err='';
+  if(p.name==='set_ratios'){const e=Object.entries(i.ratios||{}),sum=e.reduce((s,x)=>s+(+x[1]||0),0);
+    if(!e.length||Math.abs(sum-100)>.05)err='比例合計不是 100%，沒有套用';
+    else{const r={};e.forEach(([k,v])=>r[k]=v/100);st.ratios=r;
+      Object.keys(st.projectMap||{}).forEach(k=>{if(!r[st.projectMap[k]])delete st.projectMap[k]});Object.keys(st.bucketMap||{}).forEach(k=>{if(!r[st.bucketMap[k]])delete st.bucketMap[k]});
+      if(!r[st.defaultBucket])st.defaultBucket=Object.keys(r)[0]}}
+  else{const key=p.name==='set_project_map'?'projectMap':'bucketMap';const m=st[key]=st[key]||{};
+    for(const [k,v] of Object.entries(i.map||{})){if(v===null||v==='')delete m[k];else if(st.ratios[v]===undefined){err=`沒有「${v}」這個分配帳戶，沒有套用`;break}else m[k]=v}}
+  if(err){toast(err);return}
+  p.state='done';commitSettings();render();drawChat();toast('已套用');
+}
+function chatHistory(){return S.chat.map(m=>({role:m.role,content:m.content+(m.props&&m.props.length?'\n[我提出了調整：'+m.props.map(p=>p.name+' '+JSON.stringify(p.input)+'（'+(p.state==='done'?'使用者已套用':p.state==='skip'?'使用者未採用':'尚未決定')+'）').join('；')+']':'')}))}
+async function chatSend(){
+  const el=$('#ch-in'),t=el&&el.value.trim();if(!t||S.chatBusy)return;
+  S.chat=S.chat||[];S.chat.push({role:'user',content:t});S.chatBusy=true;drawChat();
+  try{
+    const {data}=await sb.auth.getSession(),tok=data&&data.session&&data.session.access_token;
+    if(!tok)throw{m:'登入已過期，請重新整理頁面登入'};
+    const r=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json',Authorization:'Bearer '+tok},body:JSON.stringify({messages:chatHistory(),context:chatContext()})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){const m={not_configured:'AI 還沒設定好：Vercel 需要設定 ANTHROPIC_API_KEY 與 ALLOWED_EMAILS，設定後重新部署。',not_allowed:'這個帳號沒有使用 AI 的權限。',login:'登入已過期，請重新登入。',upstream:'AI 服務暫時無法使用（'+(j.detail||j.status||'')+'）',upstream_unreachable:'連不上 AI 服務，請稍後再試。'}[j.error]||'發生錯誤，請稍後再試。';throw{m}}
+    S.chat.push({role:'assistant',content:j.text||'（已提出調整，請看下面）',props:(j.proposals||[]).map(p=>({name:p.name,input:p.input,state:'new'}))});
+  }catch(e){S.chat.push({role:'assistant',content:'⚠ '+(e&&e.m||'連線失敗，請檢查網路後再試。'),err:true})}
+  S.chatBusy=false;drawChat();
+}
+function drawChat(){
+  const box=$('#chbox');if(!box){openAssist();return}
+  box.innerHTML=chatHtml();const c=$('.chat');if(c)c.scrollTop=c.scrollHeight;
+}
+function chatHtml(){
+  const ms=S.chat||[];
+  return `<div class="chat" aria-live="polite">${ms.length?ms.map((m,mi)=>`<div class="bub ${m.role==='user'?'u':'a'}">${esc(m.content)}</div>${(m.props||[]).map((p,pi)=>`<div class="prop"><b style="font-weight:500">${{set_ratios:'建議調整分配比例',set_project_map:'建議調整專案對應',set_category_map:'建議調整分類對應'}[p.name]||'建議調整'}</b>${p.input&&p.input.reason?`<div class="sm muted">${esc(p.input.reason)}</div>`:''}<div class="sm" style="margin:6px 0;white-space:pre-wrap">${esc(propDesc(p))}</div>${p.state==='new'?`<div style="display:flex;gap:8px"><button class="btn p s" data-act="papply" data-m="${mi}" data-p="${pi}">套用</button><button class="btn s" data-act="pskip" data-m="${mi}" data-p="${pi}">先不要</button></div>`:`<div class="sm muted">${p.state==='done'?'已套用 ✓':'已略過'}</div>`}</div>`).join('')}`).join(''):'<div class="muted sm">可以直接問我，例如：「幫我看看這個月哪個帳戶最容易超支？」「我想多存一點財富自由帳戶，比例要怎麼調？」</div>'}${S.chatBusy?'<div class="bub a muted">思考中…</div>':''}</div>
+  <div class="lr" style="align-items:flex-end;gap:8px"><textarea id="ch-in" rows="2" placeholder="想問什麼？" aria-label="訊息"></textarea><button class="btn p" style="flex:none" data-act="csend" ${S.chatBusy?'disabled':''}>送出</button></div>
+  <div class="lr sm muted"><span>AI 只能調整分配設定，不會改動你的記帳紀錄；每項調整都要你按「套用」才生效。</span><button class="btn s" style="flex:none" data-act="cclear">清空對話</button></div>`;
+}
 function openAssist(){
+  const tab=S.atab||'chk';
+  const head=`<div class="shd"><h3>${tab==='chat'?'AI 助手':'整理助手　'+mLabel(S.month)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div><div class="seg" role="group" aria-label="功能"><button aria-pressed="${tab==='chk'}" data-act="atab" data-v="chk">檢查</button><button aria-pressed="${tab==='chat'}" data-act="atab" data-v="chat">AI 對話</button></div>`;
+  if(tab==='chat'){
+    openSheet(head+(S.mode==='cloud'?`<div id="chbox" style="display:flex;flex-direction:column;gap:12px">${chatHtml()}</div>`:'<div class="banner">AI 對話需要先登入雲端帳號才能使用。</div>'));
+    const c=$('.chat');if(c)c.scrollTop=c.scrollHeight;return}
   const is=assistIssues(),n=is.filter(i=>i.lvl===2).length;
-  openSheet(`<div class="shd"><h3>整理助手　${mLabel(S.month)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
+  openSheet(head+`
   <div class="banner">${is.length?`找到 ${is.length} 項可以整理的地方${n?`，其中 ${n} 項建議先處理`:''}。`:'這個月的帳目看起來很整齊，沒有需要處理的地方。'}</div>
   ${is.map(i=>`<div class="card"><b style="font-weight:500">${i.lvl===2?'● ':'○ '}${esc(i.t)}</b><div class="sm muted" style="margin-top:4px">${esc(i.d||'')}</div>${i.list?`<div class="sm" style="margin-top:6px">${i.list.map(x=>`<div>${esc(x)}</div>`).join('')}</div>`:''}${i.fix?`<div class="lr" style="margin-top:10px;gap:8px;flex-wrap:wrap">${i.fix}</div>`:''}</div>`).join('')}
   <p class="muted sm" style="margin:0">這些是自動檢查規則，不是真人 AI；會依你選的月份重新檢查。</p>`);
@@ -747,7 +818,8 @@ function openAcc(name,grp){
   <label class="field"><span>類型</span><select id="a-k">${Object.entries(ACC_KIND).map(([k,n])=>`<option value="${k}" ${k===k0?'selected':''}>${n}</option>`).join('')}</select></label></div>
   <label class="field"><span>${a?'目前實際餘額／市值（用來校正，留空不變）':'目前餘額／股票現值'}</span><input type="text" id="a-b" inputmode="decimal" class="num" placeholder="${a?fmt((a.init||0)+bal):'0'}"></label>
   ${a?`<label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="a-h" ${a.h?'checked':''}>移到「不再使用」（紀錄仍保留）</label>`:''}
-  <div style="display:flex;gap:8px"><button class="btn p" style="flex:1" data-act="accsave">儲存</button></div>`);
+  <div style="display:flex;gap:8px"><button class="btn p" style="flex:1" data-act="accsave">儲存</button></div>
+  ${a?`<div class="lr"><span class="sm muted">調整順序</span><span class="mv"><button class="btn s" data-act="amv" data-d="-1">↑ 上移</button><button class="btn s" data-act="amv" data-d="1">↓ 下移</button></span></div><button class="btn d" data-act="adel">刪除這個項目</button>`:''}`);
   const gs=$('#a-g'),ks=$('#a-k');gs.onchange=()=>{if(KIND_OF_GROUP[gs.value]&&!a)ks.value=KIND_OF_GROUP[gs.value]};
 }
 function saveAcc(){
@@ -780,7 +852,7 @@ function drawAlloc(){
   const cats=Object.entries(st.cats.e);
   openSheet(`<div class="shd"><h3>薪資分配設定</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><h2>分配比例　<span class="num ${Math.abs(sum-100)>.01?'exp':'inc'}">${Math.round(sum*10)/10}%</span></h2>
-   ${AL.ratios.map((r,i)=>`<div class="lr" style="margin-bottom:8px"><input type="text" data-rn="${i}" value="${esc(r[0])}" aria-label="帳戶名稱"><input type="text" class="pct" inputmode="decimal" data-rp="${i}" value="${r[1]}" aria-label="比例"><span class="muted">%</span><button class="ibtn" data-act="rdel" data-i="${i}" aria-label="刪除">${icon('x')}</button></div>`).join('')}
+   ${AL.ratios.map((r,i)=>`<div class="lr" style="margin-bottom:8px"><input type="text" data-rn="${i}" value="${esc(r[0])}" aria-label="帳戶名稱" style="min-width:0"><input type="text" class="pct" style="width:64px!important" inputmode="decimal" data-rp="${i}" value="${r[1]}" aria-label="比例"><span class="muted">%</span><span class="mv"><button class="btn s" data-act="rmv" data-i="${i}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="rmv" data-i="${i}" data-d="1" aria-label="下移">↓</button></span><button class="ibtn" data-act="rdel" data-i="${i}" aria-label="刪除">${icon('x')}</button></div>`).join('')}
    <button class="btn s" data-act="radd">新增分配帳戶</button></div>
   <div class="card"><h2>薪資基數</h2><label class="field"><span>哪些收入子分類算薪資（用頓號分隔）</span><input type="text" id="al-sal" value="${esc(AL.salary)}"></label>
    <label class="sm" style="display:flex;gap:8px;align-items:center;margin-top:10px"><input type="checkbox" id="al-bonus" ${AL.bonus?'checked':''}>把「獎金」也算進基數</label></div>
@@ -821,7 +893,7 @@ function openSettings(){
     <button class="btn" data-act="expcsv">匯出 CSV（MOZE 格式）</button>
     <button class="btn" data-act="expjson">匯出完整備份（JSON）</button>
     <label class="btn" style="display:block;text-align:center">從備份還原（JSON）<input type="file" id="rest" accept=".json,application/json" hidden></label></div></details>
-  <details><summary>帳戶分組</summary><div>${groupList().map(g=>`<div class="lr"><input type="text" data-gren="${esc(g)}" value="${esc(g)}" aria-label="分組名稱"><button class="btn s d" data-act="gdel" data-g="${esc(g)}">刪除</button></div>`).join('')}<div class="lr"><input type="text" id="g-new" placeholder="新增分組，例如：保險、投資"><button class="btn s" data-act="gadd">新增</button></div><p class="muted sm" style="margin:0">改名會連帶更新裡面的項目；有項目的分組不能刪除。</p></div></details>
+  <details><summary>帳戶分組</summary><div>${groupList().map(g=>`<div class="lr"><input type="text" data-gren="${esc(g)}" value="${esc(g)}" aria-label="分組名稱"><span class="mv"><button class="btn s" data-act="gmv" data-g="${esc(g)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="gmv" data-g="${esc(g)}" data-d="1" aria-label="下移">↓</button></span><button class="btn s d" data-act="gdel" data-g="${esc(g)}">刪除</button></div>`).join('')}<div class="lr"><input type="text" id="g-new" placeholder="新增分組，例如：保險、投資"><button class="btn s" data-act="gadd">新增</button></div><p class="muted sm" style="margin:0">改名會連帶更新裡面的項目；有項目的分組不能刪除。</p></div></details>
   <details><summary>每月預算（依支出分類）</summary><div>${expCats.map(c=>`<div class="lr"><span>${esc(c)}</span><input type="text" class="pct" inputmode="numeric" data-bud="${esc(c)}" value="${st.budgets[c]||''}" placeholder="不設定"></div>`).join('')}</div></details>
   <details><summary>固定收支（每月自動入帳）</summary><div>
     ${st.recurring.length?st.recurring.map(it=>`<div class="lr"><span><b>${esc(it.n)}</b><br><small class="muted">每月 ${it.day} 日 · ${it.t==='e'?'支出':'收入'} ${fmt(it.a)} · ${esc(it.ac)}${it.on?'':' · 已停用'}</small></span><button class="btn s" data-act="rtoggle" data-id="${esc(it.id)}">${it.on?'停用':'啟用'}</button><button class="btn s d" data-act="rdelx" data-id="${esc(it.id)}">刪除</button></div>`).join(''):'<div class="muted sm">還沒有固定收支，例如房租、訂閱、薪水。</div>'}
@@ -830,8 +902,8 @@ function openSettings(){
       <label class="field"><span>分類</span><select id="rc-c">${Object.keys(st.cats.e).map(c=>`<option>${esc(c)}</option>`).join('')}<option disabled>── 收入 ──</option>${Object.keys(st.cats.i).map(c=>`<option>${esc(c)}</option>`).join('')}</select></label><label class="field"><span>子分類</span><input type="text" id="rc-s" placeholder="例如：房租"></label></div>
       <label class="field" style="margin-top:10px"><span>帳戶</span><select id="rc-ac">${optsAcc(st.lastAcc)}</select></label>
       <button class="btn p" style="margin-top:10px;width:100%" data-act="radd2">新增固定收支</button></div></div></details>
-  <details><summary>分類管理</summary><div>${['e','i'].map(k=>`<b class="sm">${k==='e'?'支出':'收入'}分類</b>${Object.entries(st.cats[k]).map(([c,ss])=>`<div class="lr"><span><b>${esc(c)}</b><br><small class="muted">${esc(ss.join('、'))}</small></span></div>`).join('')}<div class="lr"><input type="text" data-newcat="${k}" placeholder="新增${k==='e'?'支出':'收入'}主分類"><button class="btn s" data-act="addcat" data-k="${k}">新增</button></div>`).join('')}
-    <p class="muted sm" style="margin:0">子分類在「記一筆」時直接輸入就會新增。匯入 MOZE 檔案時，分類會自動合併進來。</p></div></details>`);
+  <details><summary>分類管理</summary><div>${['e','i'].map(k=>`<b class="sm">${k==='e'?'支出':'收入'}分類</b>${Object.entries(st.cats[k]).map(([c,ss])=>`<div class="card" style="background:var(--bg);padding:10px;margin:6px 0;box-shadow:none"><div class="lr"><b>${esc(c)}</b><span class="mv"><button class="btn s" data-act="catmv" data-k="${k}" data-c="${esc(c)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="catmv" data-k="${k}" data-c="${esc(c)}" data-d="1" aria-label="下移">↓</button><button class="btn s d" data-act="catdel" data-k="${k}" data-c="${esc(c)}">刪除</button></span></div><div class="chips" style="margin-top:6px">${ss.map(x=>`<button class="chip" style="min-height:30px;font-size:13px;padding:2px 10px" data-act="subdel" data-k="${k}" data-c="${esc(c)}" data-s="${esc(x)}" aria-label="刪除子分類 ${esc(x)}">${esc(x)} ×</button>`).join('')||'<span class="muted sm">沒有子分類</span>'}</div></div>`).join('')}<div class="lr"><input type="text" data-newcat="${k}" placeholder="新增${k==='e'?'支出':'收入'}主分類"><button class="btn s" data-act="addcat" data-k="${k}">新增</button></div>`).join('')}
+    <p class="muted sm" style="margin:0">點子分類可以刪除，刪除分類不會刪掉已經記的紀錄。子分類在「記一筆」時直接輸入就會新增。</p></div></details>`);
 }
 function download(name,data){
   const u=URL.createObjectURL(new Blob([data],{type:'text/plain;charset=utf-8'})),a=document.createElement('a');
@@ -881,6 +953,18 @@ const ACTS={
   srange:t=>{S.srange=+t.dataset.v;render()},
   sync:()=>syncPrices(true),
   assist:()=>openAssist(),
+  atab:t=>{S.atab=t.dataset.v;openAssist()},
+  rmv:t=>{syncAL();moveIdx(AL.ratios,+t.dataset.i,+t.dataset.d);drawAlloc()},
+  gmv:t=>{const st=S.settings;st.groups=groupList().filter(g=>g!=='不再使用');moveIdx(st.groups,st.groups.indexOf(t.dataset.g),+t.dataset.d);commitSettings();openSettings();render()},
+  catmv:t=>{const st=S.settings,k=t.dataset.k;st.cats[k]=moveKey(st.cats[k],t.dataset.c,+t.dataset.d);commitSettings();openSettings()},
+  catdel:t=>{if(!t.dataset.sure){t.dataset.sure='1';t.textContent='再按一次';return}delete S.settings.cats[t.dataset.k][t.dataset.c];commitSettings();openSettings();render()},
+  subdel:t=>{const l=S.settings.cats[t.dataset.k][t.dataset.c];const i=l.indexOf(t.dataset.s);if(i>=0)l.splice(i,1);commitSettings();openSettings()},
+  amv:t=>{const st=S.settings,a=st.accounts.find(x=>x.n===F.acc);if(!a)return;const d=+t.dataset.d,g=grpOf(a);let i=st.accounts.indexOf(a),j=i+d;while(j>=0&&j<st.accounts.length&&(grpOf(st.accounts[j])!==g||st.accounts[j].h))j+=d;if(j<0||j>=st.accounts.length)return;[st.accounts[i],st.accounts[j]]=[st.accounts[j],st.accounts[i]];commitSettings();render();toast('已調整順序')},
+  adel:t=>{const st=S.settings,n=F.acc;if(allRecs().some(r=>r.ac===n)){toast('這個帳戶已有紀錄，請改用「移到不再使用」');return}if(!t.dataset.sure){t.dataset.sure='1';t.textContent='再按一次確認刪除';return}st.accounts=st.accounts.filter(a=>a.n!==n);commitSettings();closeSheet();render();toast('已刪除')},
+  csend:()=>chatSend(),
+  papply:t=>proposalApply(+t.dataset.m,+t.dataset.p,true),
+  pskip:t=>proposalApply(+t.dataset.m,+t.dataset.p,false),
+  cclear:()=>{S.chat=[];openAssist()},
   afixproj:()=>{const v=$('#as-proj').value;if(!v){toast('請先選專案');return}const t=new Set();recs(S.month).forEach(r=>{if(r.t==='e'&&!r.p){r.p=v;t.add(S.month)}});t.forEach(commitMonth);render();openAssist();toast('已套用');},
   afixpm:t=>{const p=t.dataset.p,sel=[...document.querySelectorAll('[data-apm]')].find(x=>x.dataset.apm===p);if(!sel||!sel.value){toast('請先選帳戶');return}(S.settings.projectMap=S.settings.projectMap||{})[p]=sel.value;commitSettings();render();openAssist();toast('已套用');},
   adedup:t=>{const ids=t.dataset.ids.split(',');const touched=new Set();for(const m in S.months){const n=S.months[m].length;S.months[m]=S.months[m].filter(r=>!ids.includes(r.id));if(S.months[m].length!==n)touched.add(m)}touched.forEach(commitMonth);render();openAssist();toast('已刪除');},
