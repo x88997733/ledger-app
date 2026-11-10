@@ -594,7 +594,7 @@ function vAcct(){
   const cards=accs.filter(a=>a.k==='card'&&!a.h),bills=(st.bills[S.month]||{});
   const unpaid=cards.reduce((s,a)=>{const b=bills[a.n]||{};return s+(b.paid?0:(+b.amt||0))},0);
   const cardH=cards.length?`<div class="card"><h2>${mLabel(S.month)}　信用卡帳單核對</h2>
-    ${cards.map(a=>{const b=bills[a.n]||{},[ps,pe]=cardPeriod(S.month,a.cd),sp=cardSpend(a.n,S.month,a.cd),has=b.amt!==undefined&&b.amt!==null&&b.amt!=='',diff=has?(+b.amt)-sp:null;
+    ${cards.map(a=>{const b=bills[a.n]||{},[ps,pe]=cardPeriod(S.month,a.cd,a.lag),sp=cardSpend(a.n,S.month,a.cd),has=b.amt!==undefined&&b.amt!==null&&b.amt!=='',diff=has?(+b.amt)-sp:null;
       const stt=!has?'<span class="muted">還沒填帳單</span>':diff===0?'<span class="inc">吻合 ✓</span>':diff>0?`<span class="exp">少記 $${fmt(diff)}</span>`:`<span class="warn" style="color:var(--warn)">多記 $${fmt(-diff)}</span>`;
       return `<div style="padding:10px 0;border-bottom:1px solid var(--line)"><div class="lr"><b style="font-weight:500">${esc(a.n)}</b><span class="sm" style="flex:none">${stt}</span></div>
       <div class="sm muted">帳單期間 ${ps.slice(5).replace('-','/')}～${pe.slice(5).replace('-','/')}　已記 <span class="num">$${fmt(sp)}</span></div>
@@ -757,14 +757,15 @@ function openAssist(){
 /* ---------- 信用卡帳單核對 ---------- */
 const pad2=n=>String(n).padStart(2,'0');
 const dimOf=(y,m)=>new Date(y,m,0).getDate();
-function cardPeriod(m,cd){
+function cardPeriod(m,cd,lag){
+  if(lag&&cd)m=monthAdd(m,-1);
   const [y,mo]=m.split('-').map(Number);
   if(!cd)return[m+'-01',m+'-'+pad2(dimOf(y,mo))];
   const pm=monthAdd(m,-1),[py,pmo]=pm.split('-').map(Number),c=Math.min(cd,dimOf(y,mo)),pc=Math.min(cd,dimOf(py,pmo)),st=new Date(py,pmo-1,pc+1);
   return[st.getFullYear()+'-'+pad2(st.getMonth()+1)+'-'+pad2(st.getDate()),m+'-'+pad2(c)];
 }
 function cardRecs(card,m,cd){
-  const [ps,pe]=cardPeriod(m,cd),out=[];
+  const ac=S.settings.accounts.find(x=>x.n===card),[ps,pe]=cardPeriod(m,cd,ac&&ac.lag),out=[];
   for(let x=monthOf(ps);x<=monthOf(pe);x=monthAdd(x,1))for(const r of recs(x))if(r.ac===card&&(r.t==='e'||r.t==='i')&&r.d>=ps&&r.d<=pe)out.push(r);
   return out;
 }
@@ -803,17 +804,18 @@ function reconcile(items,rsAll,rsPeriod){
 }
 function cardAllRecs(card){const o=[];for(const m in S.months)for(const r of S.months[m])if(r.ac===card&&r.t==='e')o.push(r);return o}
 function reconData(card,m){
-  const st=S.settings,a=st.accounts.find(x=>x.n===card),bm=(st.bills[m]||{})[card]||{},[ps,pe]=cardPeriod(m,a.cd),rsP=cardRecs(card,m,a.cd);
+  const st=S.settings,a=st.accounts.find(x=>x.n===card),bm=(st.bills[m]||{})[card]||{},[ps,pe]=cardPeriod(m,a.cd,a.lag),rsP=cardRecs(card,m,a.cd);
+  const wide=n=>{const f=new Date(ps),g=new Date(pe);f.setDate(f.getDate()-n);g.setDate(g.getDate()+n);const iso=d=>d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());return[iso(f),iso(g)]},[w0,w1]=wide(20),rsX=allRecs().filter(r=>r.ac===card&&(r.t==='e'||r.t==='i')&&r.d>=w0&&r.d<=w1&&!(r.d>=ps&&r.d<=pe)).sort((x,y)=>x.d.localeCompare(y.d));
   const items=bm.raw?parseBillText(bm.raw,[ps,pe],bm.flip):(bm.items||[]),ch=items.filter(x=>!x.credit),cr=items.filter(x=>x.credit);
   const chS=ch.reduce((s,x)=>s+x.a,0),crS=cr.reduce((s,x)=>s+x.a,0);
-  return{a,bm,ps,pe,rsP,items,ch,cr,chS,crS,net:chS-crS,rec:rsP.reduce((s,r)=>s-r.a,0),chkSum:rsP.filter(r=>!(bm.off||[]).includes(r.id)).reduce((s,r)=>s-r.a,0),R:items.length?reconcile(items,cardAllRecs(card),rsP):null};
+  return{a,bm,ps,pe,rsP,rsX,items,ch,cr,chS,crS,net:chS-crS,rec:rsP.reduce((s,r)=>s-r.a,0),chkSum:[...rsP.filter(r=>!(bm.off||[]).includes(r.id)),...rsX.filter(r=>(bm.inc||[]).includes(r.id))].reduce((s,r)=>s-r.a,0),R:items.length?reconcile(items,cardAllRecs(card),rsP):null};
 }
 let RC=null;
 function openRecon(card){RC={card};drawRecon()}
 function drawRecon(){
-  const m=S.month,D=reconData(RC.card,m),{a,bm,ps,pe,rsP,items,ch,cr,chS,crS,net,R}=D;
+  const m=S.month,D=reconData(RC.card,m),{a,bm,ps,pe,rsP,rsX,items,ch,cr,chS,crS,net,R}=D;
   const off=bm.off||[],has=bm.amt!==undefined&&bm.amt!==null&&bm.amt!=='',bill=has?+bm.amt:null;
-  const sel=rsP.filter(r=>!off.includes(r.id)),selSum=sel.reduce((s,r)=>s-r.a,0),diff=bill===null?null:bill-selSum;
+  const inc=bm.inc||[],sel=[...rsP.filter(r=>!off.includes(r.id)),...rsX.filter(r=>inc.includes(r.id))],selSum=sel.reduce((s,r)=>s-r.a,0),diff=bill===null?null:bill-selSum;
   const sorted=[...rsP].sort((x,y)=>x.d.localeCompare(y.d)||0);
   const row=(x)=>`${x.d.slice(5).replace('-','/')} ${esc(x.n||x.c||'')}${x.s?'·'+esc(x.s):''}　$${fmt(x.a>0?x.a:-x.a)}`;
   let hint='';
@@ -822,7 +824,7 @@ function drawRecon(){
   const d0=diff===0;
   openSheet(`<div class="shd"><h3>核對　${esc(RC.card)}　${mLabel(m)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><div class="grid2"><label class="field"><span>帳單總金額</span><input type="text" id="rc-amt" inputmode="numeric" value="${has?esc(bm.amt):''}"></label><label class="field"><span>結帳日（每月幾號）</span><input type="text" id="rc-cd" inputmode="numeric" value="${a.cd||''}" placeholder="例如 15"></label></div>
-  <div class="sm muted" style="margin-top:8px">帳單期間 ${ps}～${pe}</div></div>
+  <label class="sm" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="rc-lag" ${a.lag?'checked':''}><span>帳單月份是「繳款月」（結帳日在上個月）</span></label><div class="sm muted" style="margin-top:6px">帳單期間 ${ps}～${pe}</div></div>
   <div class="banner" style="display:flex;flex-direction:column;gap:6px">
    <div class="lr"><span>帳單金額</span><b class="num">${has?'$'+fmt(bill):'尚未填寫'}</b></div>
    <div class="lr"><span>你勾選的記帳（${sel.length} 筆）</span><b class="num">$${fmt(selSum)}</b></div>
@@ -833,6 +835,7 @@ function drawRecon(){
   <div class="card"><b style="font-weight:500">這期「${esc(RC.card)}」的記帳</b><div class="sm muted" style="margin:2px 0 6px">勾選＝這筆有在帳單上。預設全部勾選。</div>
   ${sorted.length?sorted.map(r=>`<div class="lr" style="padding:7px 0;border-bottom:1px solid var(--line);gap:8px"><label style="display:flex;gap:10px;align-items:center;min-width:0;flex:1"><input type="checkbox" data-act="rcchk" data-id="${esc(r.id)}" ${off.includes(r.id)?'':'checked'} style="flex:none;width:20px;height:20px"><span class="sm" style="min-width:0;overflow-wrap:anywhere">${r.d.slice(5).replace('-','/')} ${esc(r.c)}${r.s?'·'+esc(r.s):''}${r.n?'　'+esc(r.n):''}</span></label><span class="num ${r.t==='i'?'inc':''}" style="flex:none">${r.t==='i'?'−':''}$${fmt(Math.abs(r.a))}</span><button class="btn s" style="flex:none" data-act="rcedit" data-id="${esc(r.id)}">修改</button></div>`).join(''):'<div class="sm muted">這期沒有記帳紀錄</div>'}
   <button class="btn s" style="margin-top:10px" data-act="rcnew">＋ 補記一筆</button></div>
+  ${rsX.length?`<div class="card"><b style="font-weight:500">期間外的紀錄（前後 20 天）</b><div class="sm muted" style="margin:2px 0 6px">銀行有時會把較早或較晚的消費算進這期。勾選＝算進這期帳單。</div>${rsX.map(r=>`<div class="lr" style="padding:7px 0;border-bottom:1px solid var(--line);gap:8px"><label style="display:flex;gap:10px;align-items:center;min-width:0;flex:1"><input type="checkbox" data-act="rcchk" data-x="1" data-id="${esc(r.id)}" ${inc.includes(r.id)?'checked':''} style="flex:none;width:20px;height:20px"><span class="sm" style="min-width:0;overflow-wrap:anywhere">${r.d.slice(5).replace('-','/')} ${esc(r.c)}${r.s?'·'+esc(r.s):''}${r.n?'　'+esc(r.n):''}</span></label><span class="num" style="flex:none">$${fmt(Math.abs(r.a))}</span></div>`).join('')}</div>`:''}
   <details><summary>進階：貼上帳單明細，逐筆找出少記的項目</summary><div>
   <label class="field"><span>每行一筆，可以貼算式，例如「10/5淘寶=29+1937-5」（正數花費、負數退費）</span><textarea id="rc-txt" rows="6" placeholder="11/08 全家便利商店 120&#10;10/5淘寶=29+1937+29">${esc(bm.raw||'')}</textarea></label>
   <label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rc-flip" ${bm.flip?'checked':''}><span>反轉：負數才是刷卡、正數是退費</span></label>
@@ -847,10 +850,10 @@ function drawRecon(){
 }
 function rcSave(){
   const st=S.settings,a=st.accounts.find(x=>x.n===RC.card),m=S.month;
-  const cd=parseInt($('#rc-cd').value);a.cd=cd>0&&cd<=31?cd:undefined;
+  const cd=parseInt($('#rc-cd').value);a.cd=cd>0&&cd<=31?cd:undefined;a.lag=$('#rc-lag')&&$('#rc-lag').checked?1:0;
   const bills=st.bills[m]||(st.bills[m]={}),b=bills[RC.card]||(bills[RC.card]={});
   const v=$('#rc-amt').value.replace(/,/g,'').trim();b.amt=v===''?null:+v;
-  {const t=$('#rc-txt');if(t){b.raw=t.value;b.flip=$('#rc-flip').checked;b.items=parseBillText(b.raw,cardPeriod(m,a.cd),b.flip)}}
+  {const t=$('#rc-txt');if(t){b.raw=t.value;b.flip=$('#rc-flip').checked;b.items=parseBillText(b.raw,cardPeriod(m,a.cd,a.lag),b.flip)}}
   commitSettings();render();drawRecon();
 }
 
@@ -1056,7 +1059,7 @@ function saveRec(again){
   if(!(RC&&RC.back))S.month=monthOf(F.d);
   if(again){F={mode:'add',t:keepT,id:'',a:'',c:'',s:'',ac:keepAc,to:keepTo,d,tm:'',n:'',p:''};drawAdd();toast('已儲存')}
   else{closeSheet();toast('已儲存');if(RC&&RC.back){RC.back=false;render();drawRecon();
-    const a0=S.settings.accounts.find(x=>x.n===RC.card),[p0,p1]=cardPeriod(S.month,a0.cd);
+    const a0=S.settings.accounts.find(x=>x.n===RC.card),[p0,p1]=cardPeriod(S.month,a0.cd,a0.lag);
     if(keepAc!==RC.card||d<p0||d>p1)setTimeout(()=>toast('這筆不在這張卡這期（'+p0.slice(5)+'～'+p1.slice(5)+'）的帳單內，所以沒列入核對'),300);
     return}}
   render();
@@ -1237,10 +1240,10 @@ const ACTS={
   afixpm:t=>{const p=t.dataset.p,sel=[...document.querySelectorAll('[data-apm]')].find(x=>x.dataset.apm===p);if(!sel||!sel.value){toast('請先選帳戶');return}(S.settings.projectMap=S.settings.projectMap||{})[p]=sel.value;commitSettings();render();openAssist();toast('已套用');},
   adedup:t=>{const ids=t.dataset.ids.split(',');const touched=new Set();for(const m in S.months){const n=S.months[m].length;S.months[m]=S.months[m].filter(r=>!ids.includes(r.id));if(S.months[m].length!==n)touched.add(m)}touched.forEach(commitMonth);render();openAssist();toast('已刪除');},
   rcon:t=>openRecon(t.dataset.n),
-  rcchk:t=>{const st=S.settings,bills=st.bills[S.month]||(st.bills[S.month]={}),b=bills[RC.card]||(bills[RC.card]={}),off=b.off||(b.off=[]),id=t.dataset.id,i=off.indexOf(id);if(i>=0)off.splice(i,1);else off.push(id);commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
+  rcchk:t=>{const st=S.settings,bills=st.bills[S.month]||(st.bills[S.month]={}),b=bills[RC.card]||(bills[RC.card]={}),off=t.dataset.x?(b.inc||(b.inc=[])):(b.off||(b.off=[])),id=t.dataset.id,i=off.indexOf(id);if(i>=0)off.splice(i,1);else off.push(id);commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
   rcedit:t=>{RC.back=true;ACTS.edit({dataset:{id:t.dataset.id}})},
-  rcnew:()=>{RC.back=true;closeSheet();const pe=cardPeriod(S.month,S.settings.accounts.find(x=>x.n===RC.card).cd)[1],d=pe<nowDate()?pe:nowDate();F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'',p:''};drawAdd()},
-  rcfill:()=>{const D=reconData(RC.card,S.month),off=D.bm.off||[],selSum=D.rsP.filter(r=>!off.includes(r.id)).reduce((s,r)=>s-r.a,0),diff=(+D.bm.amt)-selSum;if(!(diff>0))return;RC.back=true;closeSheet();const d=D.pe<nowDate()?D.pe:nowDate();F={mode:'add',t:'e',id:'',a:String(diff),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'帳單差額補記',p:''};drawAdd()},
+  rcnew:()=>{RC.back=true;closeSheet();const _a=S.settings.accounts.find(x=>x.n===RC.card),pe=cardPeriod(S.month,_a.cd,_a.lag)[1],d=pe<nowDate()?pe:nowDate();F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'',p:''};drawAdd()},
+  rcfill:()=>{const D=reconData(RC.card,S.month),diff=(+D.bm.amt)-D.chkSum;if(!(diff>0))return;RC.back=true;closeSheet();const d=D.pe<nowDate()?D.pe:nowDate();F={mode:'add',t:'e',id:'',a:String(diff),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'帳單差額補記',p:''};drawAdd()},
   rcrun:()=>rcSave(),
   rcadd:t=>{const D=reconData(RC.card,S.month),it=D.R&&D.R.missing[+t.dataset.i];if(!it)return;
     closeSheet();F={mode:'add',t:'e',id:'',a:String(it.a),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d:it.d,tm:'',n:it.n,p:''};drawAdd()},
@@ -1310,7 +1313,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target;
-  if((t.id==='rc-amt'||t.id==='rc-cd')&&RC){setTimeout(()=>{if(!document.getElementById('rc-amt'))return;const y=$('.sheet').scrollTop;rcSave();$('.sheet').scrollTop=y},0);return}
+  if((t.id==='rc-amt'||t.id==='rc-cd'||t.id==='rc-lag')&&RC){setTimeout(()=>{if(!document.getElementById('rc-amt'))return;const y=$('.sheet').scrollTop;rcSave();$('.sheet').scrollTop=y},0);return}
   if(F&&F.t!==undefined&&(t.id==='f-ion'||t.id==='f-ac')&&document.getElementById('f-a')){syncF();drawAdd();return}
   if(t.id==='imp'&&t.files[0])onImport(t.files[0]);
   if(t.id==='rest'&&t.files[0])t.files[0].text().then(tx=>{try{
