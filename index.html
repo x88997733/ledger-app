@@ -765,7 +765,7 @@ function cardPeriod(m,cd){
 }
 function cardRecs(card,m,cd){
   const [ps,pe]=cardPeriod(m,cd),out=[];
-  for(let x=monthOf(ps);x<=monthOf(pe);x=monthAdd(x,1))for(const r of recs(x))if(r.ac===card&&r.t==='e'&&r.d>=ps&&r.d<=pe)out.push(r);
+  for(let x=monthOf(ps);x<=monthOf(pe);x=monthAdd(x,1))for(const r of recs(x))if(r.ac===card&&(r.t==='e'||r.t==='i')&&r.d>=ps&&r.d<=pe)out.push(r);
   return out;
 }
 const cardSpend=(card,m,cd)=>cardRecs(card,m,cd).reduce((s,r)=>s-r.a,0);
@@ -778,15 +778,15 @@ function parseBillText(txt,period,flip){
     let ds=y+'-'+pad2(mo)+'-'+pad2(d);if(!dm[1]&&ds>pe){y--;ds=y+'-'+pad2(mo)+'-'+pad2(d)}
     const rest=line.replace(dm[0],' '),eq=rest.search(/[=＝]/);
     if(eq>=0){
-      // 算式行：例如「淘寶=-8-537」或「淘寶=29+1937」，逐項拆開。銀行 App 格式：負數是刷卡，正數是退款／入帳（可在畫面上反轉）
+      // 算式行：例如「淘寶=29+1937-5」逐項拆開。信用卡帳單格式：正數是花費，負數是退費（可在畫面上反轉）
       const name=rest.slice(0,eq).replace(/\s+/g,' ').trim(),expr=rest.slice(eq+1).replace(/[－−–]/g,'-').replace(/＋/g,'+');
       const re=/([+\-]?)\s*(\d[\d,]*(?:\.\d+)?)/g;let m;
-      while((m=re.exec(expr))){const v=parseFloat(m[2].replace(/,/g,''));if(!(v>0))continue;let neg=m[1]==='-';if(flip)neg=!neg;items.push({d:ds,a:Math.round(v),n:name,credit:!neg})}
+      while((m=re.exec(expr))){const v=parseFloat(m[2].replace(/,/g,''));if(!(v>0))continue;let neg=m[1]==='-';if(flip)neg=!neg;items.push({d:ds,a:Math.round(v),n:name,credit:neg})}
     }else{
       const nums=rest.match(/-?\d[\d,]*(?:\.\d+)?/g);if(!nums)continue;
       const last=nums[nums.length-1],v=parseFloat(last.replace(/,/g,''));if(!v)continue;
       const i=rest.lastIndexOf(last);const n=(rest.slice(0,i)+rest.slice(i+last.length)).replace(/\s+/g,' ').trim();
-      items.push({d:ds,a:Math.round(Math.abs(v)),n,credit:v<0});
+      items.push({d:ds,a:Math.round(Math.abs(v)),n,credit:flip?v>0:v<0});
     }
   }
   return items;
@@ -804,42 +804,53 @@ function reconcile(items,rsAll,rsPeriod){
 function cardAllRecs(card){const o=[];for(const m in S.months)for(const r of S.months[m])if(r.ac===card&&r.t==='e')o.push(r);return o}
 function reconData(card,m){
   const st=S.settings,a=st.accounts.find(x=>x.n===card),bm=(st.bills[m]||{})[card]||{},[ps,pe]=cardPeriod(m,a.cd),rsP=cardRecs(card,m,a.cd);
-  const items=bm.items||[],ch=items.filter(x=>!x.credit),cr=items.filter(x=>x.credit);
+  const items=bm.raw?parseBillText(bm.raw,[ps,pe],bm.flip):(bm.items||[]),ch=items.filter(x=>!x.credit),cr=items.filter(x=>x.credit);
   const chS=ch.reduce((s,x)=>s+x.a,0),crS=cr.reduce((s,x)=>s+x.a,0);
-  return{a,bm,ps,pe,rsP,items,ch,cr,chS,crS,net:chS-crS,rec:rsP.reduce((s,r)=>s-r.a,0),R:items.length?reconcile(items,cardAllRecs(card),rsP):null};
+  return{a,bm,ps,pe,rsP,items,ch,cr,chS,crS,net:chS-crS,rec:rsP.reduce((s,r)=>s-r.a,0),chkSum:rsP.filter(r=>!(bm.off||[]).includes(r.id)).reduce((s,r)=>s-r.a,0),R:items.length?reconcile(items,cardAllRecs(card),rsP):null};
 }
 let RC=null;
 function openRecon(card){RC={card};drawRecon()}
 function drawRecon(){
-  const m=S.month,D=reconData(RC.card,m),{a,bm,ps,pe,rsP,items,ch,cr,chS,crS,net,rec,R}=D;
-  const has=bm.amt!==undefined&&bm.amt!==null&&bm.amt!=='',total=has?+bm.amt:(items.length?net:null),diff=total===null?null:total-rec;
+  const m=S.month,D=reconData(RC.card,m),{a,bm,ps,pe,rsP,items,ch,cr,chS,crS,net,R}=D;
+  const off=bm.off||[],has=bm.amt!==undefined&&bm.amt!==null&&bm.amt!=='',bill=has?+bm.amt:null;
+  const sel=rsP.filter(r=>!off.includes(r.id)),selSum=sel.reduce((s,r)=>s-r.a,0),diff=bill===null?null:bill-selSum;
+  const sorted=[...rsP].sort((x,y)=>x.d.localeCompare(y.d)||0);
   const row=(x)=>`${x.d.slice(5).replace('-','/')} ${esc(x.n||x.c||'')}${x.s?'·'+esc(x.s):''}　$${fmt(x.a>0?x.a:-x.a)}`;
-  const tag=(d)=>d===0?'<b class="inc">吻合 ✓</b>':d>0?`<b class="exp">少記 $${fmt(d)}</b>`:`<b style="color:var(--warn)">多記 $${fmt(-d)}</b>`;
   let hint='';
-  if(items.length&&has){const t=+bm.amt,c=[[net,'刷卡扣掉退款後的淨額'],[chS,'刷卡合計（沒扣退款）'],[chS+crS,'全部金額相加']].find(x=>Math.abs(x[0]-t)<=1);
-    hint=c?`<div class="sm inc">✓ 明細的「${c[1]}」等於帳單金額，明細貼得完整。</div>`:`<div class="sm" style="color:var(--warn)">明細加總跟帳單金額對不上（差 $${fmt(Math.abs(net-t))}），可能漏貼了幾行，或正負號判斷相反（可以勾下面的「反轉」）。</div>`}
+  if(items.length&&has){const t=bill,c=[[net,'刷卡扣掉退費後的淨額'],[chS,'刷卡合計（沒扣退費）']].find(x=>Math.abs(x[0]-t)<=1);
+    hint=c?`<div class="sm inc">✓ 明細的「${c[1]}」等於帳單金額，明細貼得完整。</div>`:`<div class="sm" style="color:var(--warn)">明細加總跟帳單金額對不上（差 $${fmt(Math.abs(net-t))}），可能漏貼了幾行，或正負號判斷相反（可以勾「反轉」）。</div>`}
+  const d0=diff===0;
   openSheet(`<div class="shd"><h3>核對　${esc(RC.card)}　${mLabel(m)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><div class="grid2"><label class="field"><span>帳單總金額</span><input type="text" id="rc-amt" inputmode="numeric" value="${has?esc(bm.amt):''}"></label><label class="field"><span>結帳日（每月幾號）</span><input type="text" id="rc-cd" inputmode="numeric" value="${a.cd||''}" placeholder="例如 15"></label></div>
-  <div class="sm muted" style="margin-top:8px">帳單期間 ${ps}～${pe}</div>
-  <label class="field" style="margin-top:10px"><span>貼上帳單明細（每行一筆）。可以貼算式，例如「10/7淘寶=-1-73-2」，會自動拆開加總</span><textarea id="rc-txt" rows="6" placeholder="11/08 全家便利商店 120&#10;10/7淘寶=-1-73-2-155">${esc(bm.raw||'')}</textarea></label>
-  <label class="sm" style="display:flex;gap:8px;align-items:center;margin-top:8px"><input type="checkbox" id="rc-flip" ${bm.flip?'checked':''}><span>反轉：算式裡「正數」才是刷卡（預設負數是刷卡、正數是退款）</span></label>
-  <button class="btn p" style="width:100%;margin-top:10px" data-act="rcrun">儲存並核對</button></div>
-  ${items.length?`<div class="card"><b style="font-weight:500">明細加總</b>
-   <div class="lr sm" style="padding:4px 0"><span>刷卡 ${ch.length} 筆</span><span class="num">$${fmt(chS)}</span></div>
-   <div class="lr sm" style="padding:4px 0"><span>退款／入帳 ${cr.length} 筆</span><span class="num">−$${fmt(crS)}</span></div>
-   <div class="lr" style="padding:6px 0;border-top:1px solid var(--line)"><b style="font-weight:500">淨額</b><b class="num">${net<0?'−':''}$${fmt(Math.abs(net))}</b></div>${hint}</div>`:''}
-  <div class="banner">你記的 <b class="num">$${fmt(rec)}</b>（${rsP.length} 筆）${total===null?'　尚未填帳單金額':`　${has?'帳單':'明細淨額'} <b class="num">$${fmt(total)}</b>　${tag(diff)}`}</div>
-  ${R?`<div class="card"><b style="font-weight:500">已對上 ${R.matched.length} 筆</b></div>
-  <div class="card"><b style="font-weight:500;color:var(--exp)">帳單有、你沒記（${R.missing.length}）</b>${R.missing.length?R.missing.map((x,i)=>`<div class="lr sm" style="padding:6px 0"><span>${row(x)}</span><button class="btn s" style="flex:none" data-act="rcadd" data-i="${i}">補記</button></div>`).join(''):'<div class="sm muted">沒有</div>'}</div>
-  <div class="card"><b style="font-weight:500;color:var(--warn)">你記了、帳單沒有（${R.extra.length}）</b><div class="sm muted" style="margin:2px 0 6px">可能是重複記、金額記錯，或是還沒入帳、算在下一期。</div>${R.extra.length?R.extra.map(x=>`<div class="sm" style="padding:4px 0">${row({...x,a:-x.a})}</div>`).join(''):'<div class="sm muted">沒有</div>'}</div>`
-  :`<div class="sm muted">貼上帳單明細後，會自動加總，並找出少記或多記的項目。</div>`}`);
+  <div class="sm muted" style="margin-top:8px">帳單期間 ${ps}～${pe}</div></div>
+  <div class="banner" style="display:flex;flex-direction:column;gap:6px">
+   <div class="lr"><span>帳單金額</span><b class="num">${has?'$'+fmt(bill):'尚未填寫'}</b></div>
+   <div class="lr"><span>你勾選的記帳（${sel.length} 筆）</span><b class="num">$${fmt(selSum)}</b></div>
+   <div class="lr" style="border-top:1px solid var(--line);padding-top:6px"><b style="font-weight:500">差額</b><b class="num">${diff===null?'—':d0?'<span class="inc">0　吻合 ✓</span>':diff>0?`<span class="exp">少記 $${fmt(diff)}</span>`:`<span style="color:var(--warn)">多記 $${fmt(-diff)}</span>`}</b></div>
+   ${diff>0?`<button class="btn p s" data-act="rcfill">補記差額 $${fmt(diff)}</button><div class="sm muted">帳單比你記的多。可以補記一筆，或把下面金額記錯的那筆點「修改」。</div>`:''}
+   ${diff<0?'<div class="sm muted">你記得比帳單多。可以取消勾選不在這期帳單的紀錄，或點「修改」改金額。</div>':''}
+   ${d0?'<div class="sm inc">這期帳單已經對平了。</div>':''}</div>
+  <div class="card"><b style="font-weight:500">這期「${esc(RC.card)}」的記帳</b><div class="sm muted" style="margin:2px 0 6px">勾選＝這筆有在帳單上。預設全部勾選。</div>
+  ${sorted.length?sorted.map(r=>`<div class="lr" style="padding:7px 0;border-bottom:1px solid var(--line);gap:8px"><label style="display:flex;gap:10px;align-items:center;min-width:0;flex:1"><input type="checkbox" data-act="rcchk" data-id="${esc(r.id)}" ${off.includes(r.id)?'':'checked'} style="flex:none;width:20px;height:20px"><span class="sm" style="min-width:0;overflow-wrap:anywhere">${r.d.slice(5).replace('-','/')} ${esc(r.c)}${r.s?'·'+esc(r.s):''}${r.n?'　'+esc(r.n):''}</span></label><span class="num ${r.t==='i'?'inc':''}" style="flex:none">${r.t==='i'?'−':''}$${fmt(Math.abs(r.a))}</span><button class="btn s" style="flex:none" data-act="rcedit" data-id="${esc(r.id)}">修改</button></div>`).join(''):'<div class="sm muted">這期沒有記帳紀錄</div>'}
+  <button class="btn s" style="margin-top:10px" data-act="rcnew">＋ 補記一筆</button></div>
+  <details><summary>進階：貼上帳單明細，逐筆找出少記的項目</summary><div>
+  <label class="field"><span>每行一筆，可以貼算式，例如「10/5淘寶=29+1937-5」（正數花費、負數退費）</span><textarea id="rc-txt" rows="6" placeholder="11/08 全家便利商店 120&#10;10/5淘寶=29+1937+29">${esc(bm.raw||'')}</textarea></label>
+  <label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="rc-flip" ${bm.flip?'checked':''}><span>反轉：負數才是刷卡、正數是退費</span></label>
+  <button class="btn p" data-act="rcrun">儲存並比對</button>
+  ${items.length?`<div class="card" style="background:var(--bg);box-shadow:none"><b style="font-weight:500">明細加總</b>
+   <div class="lr sm" style="padding:4px 0"><span>花費 ${ch.length} 筆</span><span class="num">$${fmt(chS)}</span></div>
+   <div class="lr sm" style="padding:4px 0"><span>退費 ${cr.length} 筆</span><span class="num">−$${fmt(crS)}</span></div>
+   <div class="lr" style="padding:6px 0;border-top:1px solid var(--line)"><b style="font-weight:500">淨額</b><b class="num">${net<0?'−':''}$${fmt(Math.abs(net))}</b></div>${hint}</div>
+  ${R?`<div class="sm"><b style="font-weight:500">已對上 ${R.matched.length} 筆</b></div>
+  <div class="sm"><b style="font-weight:500;color:var(--exp)">帳單有、你沒記（${R.missing.length}）</b>${R.missing.map((x,i)=>`<div class="lr" style="padding:5px 0"><span>${row(x)}</span><button class="btn s" style="flex:none" data-act="rcadd" data-i="${i}">補記</button></div>`).join('')||'<div class="muted">沒有</div>'}</div>`:''}`:''}
+  </div></details>`);
 }
 function rcSave(){
   const st=S.settings,a=st.accounts.find(x=>x.n===RC.card),m=S.month;
   const cd=parseInt($('#rc-cd').value);a.cd=cd>0&&cd<=31?cd:undefined;
   const bills=st.bills[m]||(st.bills[m]={}),b=bills[RC.card]||(bills[RC.card]={});
   const v=$('#rc-amt').value.replace(/,/g,'').trim();b.amt=v===''?null:+v;
-  b.raw=$('#rc-txt').value;b.flip=$('#rc-flip').checked;b.items=parseBillText(b.raw,cardPeriod(m,a.cd),b.flip);
+  {const t=$('#rc-txt');if(t){b.raw=t.value;b.flip=$('#rc-flip').checked;b.items=parseBillText(b.raw,cardPeriod(m,a.cd),b.flip)}}
   commitSettings();render();drawRecon();
 }
 
@@ -886,7 +897,7 @@ function drawLoanForm(){
   <div class="sm muted">${k==='out'?'你借錢給別人。對方還款時，會自動記成你的一筆收入。':k==='in'?'你向人或銀行借錢（例如保單借款）。每次還款會自動記成一筆支出。':'信用卡分期付款。每期繳款會自動記成那張卡的一筆支出，方便跟帳單核對。'}</div>
   <label class="field"><span>名稱</span><input type="text" id="lf-name" value="${esc(LF.name)}" placeholder="${k==='out'?'例如：借給姊姊':k==='in'?'例如：保單借款':'例如：手機分期'}"></label>
   ${k!=='inst'?`<label class="field"><span>對象（選填）</span><input type="text" id="lf-person" value="${esc(LF.person||'')}"></label>`:''}
-  <div class="grid2"><label class="field"><span>${k==='inst'?'分期總金額':'本金'}</span><input type="text" id="lf-pr" inputmode="numeric" value="${esc(LF.principal)}"></label>
+  <div class="grid2"><label class="field"><span>${k==='inst'?'分期總金額（有填每期金額會自動算）':'本金'}</span><input type="text" id="lf-pr" inputmode="numeric" value="${esc(LF.principal)}"></label>
   <label class="field"><span>${k==='out'?'對方還款入帳帳戶':k==='in'?'從哪個帳戶還款':'分期的信用卡'}</span><select id="lf-ac">${optsAcc(LF.account)}</select></label></div>
   <div class="card" style="background:var(--bg);box-shadow:none"><b class="sm" style="font-weight:500">固定每期還款（選填）</b><div class="grid2" style="margin-top:8px"><label class="field"><span>總期數</span><input type="text" id="lf-pe" inputmode="numeric" value="${esc(LF.periods)}"></label><label class="field"><span>每期金額</span><input type="text" id="lf-per" inputmode="numeric" value="${esc(LF.per)}"></label><label class="field"><span>每月幾號</span><input type="text" id="lf-dd" inputmode="numeric" value="${esc(LF.dueDay)}"></label><label class="field"><span>第 1 期月份</span><input type="month" id="lf-sm" value="${esc(LF.startMonth)}"></label></div><div class="sm muted" style="margin-top:6px">不填的話，就是不固定金額，還款時再自己登記。</div></div>
   ${k!=='out'?`<div class="grid2"><label class="field"><span>記帳分類</span><select id="lf-cat">${cats.map(c=>`<option ${c===LF.cat?'selected':''}>${esc(c)}</option>`).join('')}</select></label><label class="field"><span>子分類（選填）</span><input type="text" id="lf-sub" value="${esc(LF.sub||(k==='inst'?'分期':'還款'))}"></label></div>`:''}
@@ -897,7 +908,7 @@ function saveLoan(){
   const pe=parseInt(LF.periods),per=num(LF.per),dd=parseInt(LF.dueDay);let pr=num(LF.principal);
   if(!LF.name.trim()){toast('請輸入名稱');return}
   const sched=pe>0&&per>0&&dd>0&&dd<=31&&LF.startMonth?{periods:pe,per,dueDay:dd,startMonth:LF.startMonth}:null;
-  if(!(pr>0)&&sched&&LF.kind==='inst')pr=pe*per;
+  if(sched&&LF.kind==='inst'){if(pr>0&&Math.abs(pr-pe*per)>1)toast('分期總額已改為 期數×每期金額 = $'+fmt(pe*per));pr=pe*per}
   if(!(pr>0)){toast('請輸入金額');return}
   const l={id:LF.id||uid(),kind:LF.kind,name:LF.name.trim(),person:(LF.person||'').trim(),principal:pr,sched,account:LF.account,cat:LF.cat||'貸款',sub:LF.sub||'',p:LF.p||'',pays:LF.pays||[]};
   st.loans=st.loans||[];const i=st.loans.findIndex(x=>x.id===l.id);if(i>=0)st.loans[i]=l;else st.loans.push(l);
@@ -905,9 +916,10 @@ function saveLoan(){
 }
 function openLoan(id){
   const l=S.settings.loans.find(x=>x.id===id);if(!l)return;const sc=loanSched(l),hide=S.hide?' blur':'',today=nowDate();
-  openSheet(`<div class="shd"><h3>${esc(l.name)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
+  openSheet(`<div class="shd"><h3>${esc(l.name)}</h3><button class="btn s" style="flex:none;margin-left:auto;margin-right:8px" data-act="loanform" data-id="${esc(l.id)}">編輯</button><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><div class="lbl">${l.kind==='out'?'對方還欠你':'還剩'}</div><div class="big-total num${hide}" style="text-align:left;color:var(--ink)">$${fmt(loanRemain(l))}</div>
   <div class="sm muted">${LK[l.kind]}${l.person?' · '+esc(l.person):''} · 本金 $${fmt(l.principal)}${loanDone(l)?' · 已結清 ✓':''}</div></div>
+  ${sc.length&&l.kind!=='out'&&sc.some(x=>!x.pay)?`<div class="card"><b class="sm" style="font-weight:500">已經繳過的期數？</b><div class="sm muted">一次標記前幾期已繳（不會新增記帳，因為你當時已經記過了）</div><div class="grid2" style="margin-top:8px;align-items:end"><label class="field"><span>前幾期已繳</span><input type="text" id="lb-n" inputmode="numeric" placeholder="例如 3"></label><button class="btn s" data-act="lbulk" data-id="${esc(l.id)}">標記</button></div></div>`:''}
   ${sc.length?`<div class="card"><h2>還款時程</h2>${sc.map(x=>`<div class="lr sm" style="padding:5px 0"><span>第${x.k}期　${x.due.slice(5).replace('-','/')}</span><span class="num" style="flex:none">$${fmt(x.a)}</span>${x.pay?`<span class="inc" style="flex:none">已${l.kind==='out'?'收':'繳'} ✓</span>`:`<button class="btn s ${x.due<today?'d':''}" style="flex:none" data-act="loanpay" data-id="${esc(l.id)}" data-k="${x.k}">${x.due<today?'逾期·':''}${l.kind==='out'?'登記收款':'登記繳款'}</button>`}</div>`).join('')}</div>`:''}
   <div class="card"><div class="lr"><h2 style="margin:0">${l.kind==='out'?'收款':'繳款'}紀錄</h2><button class="btn s" style="flex:none" data-act="loanpay" data-id="${esc(l.id)}" data-k="">＋ 登記${l.sched?'額外':''}</button></div>
   ${(l.pays||[]).length?[...l.pays].sort((a,b)=>b.d.localeCompare(a.d)).map(p=>`<div class="lr sm" style="padding:5px 0"><span>${p.d.slice(5).replace('-','/')}${p.k?' 第'+p.k+'期':''}</span><span class="num" style="flex:none">$${fmt(p.a)}</span><button class="btn s" style="flex:none" data-act="lundo" data-id="${esc(l.id)}" data-pid="${esc(p.id)}">撤銷</button></div>`).join(''):'<div class="muted sm" style="margin-top:6px">還沒有紀錄</div>'}</div>
@@ -919,7 +931,7 @@ function openLoanPay(id,k){
   const l=S.settings.loans.find(x=>x.id===id),kk=k?+k:null,x=kk?loanSched(l).find(y=>y.k===kk):null;
   LP={id,k:kk};
   openSheet(`<div class="shd"><h3>${l.kind==='out'?'登記收款':'登記繳款'}　${esc(l.name)}${kk?' 第'+kk+'期':''}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
-  <div class="sm muted">儲存後會自動記一筆${l.kind==='out'?'收入':'支出'}到你選的帳戶。</div>
+  <label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="lp-book" checked><span>同時自動記一筆${l.kind==='out'?'收入':'支出'}（已經自己記過就取消勾選）</span></label>
   <div class="grid2"><label class="field"><span>金額</span><input type="text" id="lp-a" inputmode="numeric" class="num" value="${x?x.a:Math.min(loanRemain(l),l.sched?l.sched.per:loanRemain(l))}"></label><label class="field"><span>日期</span><input type="date" id="lp-d" value="${nowDate()}"></label></div>
   <label class="field"><span>${l.kind==='out'?'入帳帳戶':'帳戶'}</span><select id="lp-ac">${optsAcc(l.account)}</select></label>
   <button class="btn p" data-act="lpsave">儲存並記帳</button>`);
@@ -927,7 +939,8 @@ function openLoanPay(id,k){
 function saveLoanPay(){
   const st=S.settings,l=st.loans.find(x=>x.id===LP.id),a=parseFloat($('#lp-a').value.replace(/,/g,'')),d=$('#lp-d').value,ac=$('#lp-ac').value;
   if(!(a>0)||!d){toast('請填金額與日期');return}
-  const rid=uid(),out=l.kind==='out';
+  const rid=uid(),out=l.kind==='out',book=$('#lp-book').checked;
+  if(!book){(l.pays=l.pays||[]).push({id:uid(),d,a,k:LP.k,rid:null});commitSettings();closeSheet();render();toast('已標記，未新增記帳');return}
   const r={id:rid,t:out?'i':'e',a:out?a:-a,c:out?'收入':(l.cat||'貸款'),s:out?'收款':(l.sub||''),ac,d,tm:new Date().toTimeString().slice(0,5),n:out?`${l.person||l.name} 還款`:`${l.name}${LP.k?' 第'+LP.k+'期':''}`,p:l.p||'',o:'',lid:l.id};
   const m=monthOf(d);(S.months[m]||(S.months[m]=[])).push(r);
   if(out&&!st.cats.i['收入'])st.cats.i['收入']=['收款'];else if(out&&!st.cats.i['收入'].includes('收款'))st.cats.i['收入'].push('收款');
@@ -1027,9 +1040,9 @@ function saveRec(again){
   if(F.c&&F.s){const k=F.t==='i'?'i':'e',l=st.cats[k][F.c]||(st.cats[k][F.c]=[]);if(!l.includes(F.s))l.push(F.s)}
   st.lastAcc=F.ac;commitSettings();touched.forEach(commitMonth);
   const keepT=F.t,keepAc=F.ac,keepTo=F.to,d=F.d;
-  S.month=monthOf(F.d);
+  if(!(RC&&RC.back))S.month=monthOf(F.d);
   if(again){F={mode:'add',t:keepT,id:'',a:'',c:'',s:'',ac:keepAc,to:keepTo,d,tm:'',n:'',p:''};drawAdd();toast('已儲存')}
-  else{closeSheet();toast('已儲存')}
+  else{closeSheet();toast('已儲存');if(RC&&RC.back){RC.back=false;render();drawRecon();return}}
   render();
 }
 function deleteRec(){
@@ -1037,7 +1050,7 @@ function deleteRec(){
   ids.forEach(id=>{if(String(id).startsWith('rc_')&&!S.settings.skip.includes(id))S.settings.skip.push(id)});
   const touched=new Set();
   for(const m in S.months){const n=S.months[m].length;S.months[m]=S.months[m].filter(r=>!ids.includes(r.id));if(S.months[m].length!==n)touched.add(m)}
-  commitSettings();touched.forEach(commitMonth);closeSheet();render();toast('已刪除');
+  commitSettings();touched.forEach(commitMonth);closeSheet();render();toast('已刪除');if(RC&&RC.back){RC.back=false;drawRecon()}
 }
 
 /* ---------- account sheet ---------- */
@@ -1181,7 +1194,7 @@ const ACTS={
   mon:t=>{S.month=monthAdd(S.month,+t.dataset.n);S.day=null;render()},
   add:()=>openAdd(),
   edit:t=>{const id=t.dataset.id;for(const it of items(monthOf(findDate(id)))){if(it.id===id){openAdd(it);return}}},
-  close:()=>closeSheet(),
+  close:()=>{closeSheet();if(RC&&RC.back){RC.back=false;drawRecon()}},
   bg:(t,e)=>{if(e.target===t)closeSheet()},
   day:t=>{S.day=S.day===t.dataset.d?null:t.dataset.d;render()},
   cty:t=>{S.cty=t.dataset.v;render()},
@@ -1208,12 +1221,17 @@ const ACTS={
   afixpm:t=>{const p=t.dataset.p,sel=[...document.querySelectorAll('[data-apm]')].find(x=>x.dataset.apm===p);if(!sel||!sel.value){toast('請先選帳戶');return}(S.settings.projectMap=S.settings.projectMap||{})[p]=sel.value;commitSettings();render();openAssist();toast('已套用');},
   adedup:t=>{const ids=t.dataset.ids.split(',');const touched=new Set();for(const m in S.months){const n=S.months[m].length;S.months[m]=S.months[m].filter(r=>!ids.includes(r.id));if(S.months[m].length!==n)touched.add(m)}touched.forEach(commitMonth);render();openAssist();toast('已刪除');},
   rcon:t=>openRecon(t.dataset.n),
+  rcchk:t=>{const st=S.settings,bills=st.bills[S.month]||(st.bills[S.month]={}),b=bills[RC.card]||(bills[RC.card]={}),off=b.off||(b.off=[]),id=t.dataset.id,i=off.indexOf(id);if(i>=0)off.splice(i,1);else off.push(id);commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
+  rcedit:t=>{RC.back=true;ACTS.edit({dataset:{id:t.dataset.id}})},
+  rcnew:()=>{RC.back=true;closeSheet();const pe=cardPeriod(S.month,S.settings.accounts.find(x=>x.n===RC.card).cd)[1],d=pe<nowDate()?pe:nowDate();F={mode:'add',t:'e',id:'',a:'',c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'',p:''};drawAdd()},
+  rcfill:()=>{const D=reconData(RC.card,S.month),off=D.bm.off||[],selSum=D.rsP.filter(r=>!off.includes(r.id)).reduce((s,r)=>s-r.a,0),diff=(+D.bm.amt)-selSum;if(!(diff>0))return;RC.back=true;closeSheet();const d=D.pe<nowDate()?D.pe:nowDate();F={mode:'add',t:'e',id:'',a:String(diff),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d,tm:'',n:'帳單差額補記',p:''};drawAdd()},
   rcrun:()=>rcSave(),
   rcadd:t=>{const D=reconData(RC.card,S.month),it=D.R&&D.R.missing[+t.dataset.i];if(!it)return;
     closeSheet();F={mode:'add',t:'e',id:'',a:String(it.a),c:'',s:'',ac:RC.card,to:accNames()[1]||RC.card,d:it.d,tm:'',n:it.n,p:''};drawAdd()},
   loanform:t=>openLoanForm(t.dataset.id),
   lkind:t=>{syncLF();LF.kind=t.dataset.v;drawLoanForm()},
   lsave:()=>saveLoan(),
+  lbulk:t=>{const l=S.settings.loans.find(x=>x.id===t.dataset.id),n=parseInt($('#lb-n').value);if(!(n>0)){toast('請輸入期數');return}let c=0;for(const x of loanSched(l)){if(x.k>n)break;if(!x.pay){(l.pays=l.pays||[]).push({id:uid(),d:x.due,a:x.a,k:x.k,rid:null});c++}}commitSettings();render();openLoan(l.id);toast('已標記 '+c+' 期')},
   loanopen:t=>openLoan(t.dataset.id),
   loanpay:t=>openLoanPay(t.dataset.id,t.dataset.k),
   lpsave:()=>saveLoanPay(),
@@ -1275,6 +1293,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target;
+  if((t.id==='rc-amt'||t.id==='rc-cd')&&RC){setTimeout(()=>{if(!document.getElementById('rc-amt'))return;const y=$('.sheet').scrollTop;rcSave();$('.sheet').scrollTop=y},0);return}
   if(F&&F.t!==undefined&&(t.id==='f-ion'||t.id==='f-ac')&&document.getElementById('f-a')){syncF();drawAdd();return}
   if(t.id==='imp'&&t.files[0])onImport(t.files[0]);
   if(t.id==='rest'&&t.files[0])t.files[0].text().then(tx=>{try{
