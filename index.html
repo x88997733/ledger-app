@@ -630,7 +630,7 @@ function vAcct(){
   ${(()=>{const B=cardBurden();return `<div class="card"><h2>信用卡要還多少</h2>
     <div class="lr" style="padding:4px 0"><span>已出帳、還沒繳</span><span class="num exp${hide}">$${fmt(B.billed)}</span></div>
     <div class="lr" style="padding:4px 0"><span>本期已刷（還沒出帳）</span><span class="num exp${hide}">$${fmt(B.open)}</span></div>
-    <div class="lr" style="padding:8px 0 0;border-top:1px solid var(--line);margin-top:4px"><b style="font-weight:500">接下來要準備</b><b class="num exp${hide}" style="font-size:20px">$${fmt(B.billed+B.open)}</b></div></div>`})()}
+    <div class="lr" style="padding:8px 0 0;border-top:1px solid var(--line);margin-top:4px"><b style="font-weight:500">接下來要準備</b><b class="num exp${hide}" style="font-size:20px">$${fmt(B.billed+B.open)}</b></div><button class="btn s" style="margin-top:10px;width:100%" data-act="cdetail">看細項</button></div>`})()}
   <div><div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button class="btn s" data-act="sortacc">${S.sortAcc?'完成排序':'調整順序'}</button></div>${gH||'<div class="card muted">還沒有帳戶</div>'}</div>
   <p class="muted sm">餘額＝期初餘額＋所有紀錄加總。與實際不符時，點進帳戶輸入「目前實際餘額」就會自動校正。</p>`;
 }
@@ -795,6 +795,20 @@ function cardOpen(a){
   const [ps,pe]=cardPeriod(m,a.cd,false);
   let sp=0;for(const x of [monthOf(ps),monthOf(pe)])for(const r of recs(x))if(r.ac===a.n&&(r.t==='e'||r.t==='i')&&r.d>=ps&&r.d<=pe)sp-=r.a;
   return{ps,pe,sp};
+}
+function openCardDetail(){
+  const st=S.settings,cards=st.accounts.filter(a=>a.k==='card'&&!a.h),td=nowDate(),hide=S.hide?' blur':'';
+  let billedH='',openH='';
+  for(const a of cards){
+    const bl=[];for(const m of Object.keys(st.bills).sort()){const b=(st.bills[m]||{})[a.n];if(b&&+b.amt>0&&!b.paid){const pd=billPaid(a.n,m),rm=+b.amt-pd;if(rm>0)bl.push({m,amt:+b.amt,pd,rm})}}
+    if(bl.length)billedH+=`<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b style="font-weight:500">${esc(a.n)}</b>${bl.map(x=>`<div class="lr sm" style="padding:4px 0;gap:8px"><span style="flex:1;min-width:0">${+x.m.slice(5)}月帳單 $${fmt(x.amt)}${x.pd?'，已繳 $'+fmt(x.pd):''}</span><span class="num exp">$${fmt(x.rm)}</span><button class="btn s" style="flex:none" data-act="cdpay" data-n="${esc(a.n)}" data-m="${x.m}">繳費</button><button class="btn s" style="flex:none" data-act="cdpaid" data-n="${esc(a.n)}" data-m="${x.m}">已繳過</button></div>`).join('')}</div>`;
+    const o=cardOpen(a),rs=[];for(const x of [monthOf(o.ps),monthOf(o.pe)])for(const r of recs(x))if(r.ac===a.n&&(r.t==='e'||r.t==='i')&&r.d>=o.ps&&r.d<=o.pe)rs.push(r);
+    rs.sort((x,y)=>y.d.localeCompare(x.d));
+    if(rs.length)openH+=`<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="lr"><b style="font-weight:500">${esc(a.n)}</b><b class="num exp${hide}">$${fmt(o.sp)}</b></div><div class="sm muted">期間 ${o.ps.slice(5).replace('-','/')}～${o.pe.slice(5).replace('-','/')}</div>${rs.map(r=>`<div class="lr sm" style="padding:3px 0;gap:8px"><span style="flex:1;min-width:0;overflow-wrap:anywhere">${r.d.slice(5).replace('-','/')} ${esc(r.c)}${r.s?'·'+esc(r.s):''}${r.n?' '+esc(r.n):''}${r.d>td?' <span class="tag">預記</span>':''}</span><span class="num ${r.t==='i'?'inc':''}${hide}">${r.t==='i'?'−':''}$${fmt(Math.abs(r.a))}</span></div>`).join('')}</div>`;
+  }
+  openSheet(`<div class="shd"><h3>信用卡要還多少</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
+  <div class="card"><h2>已出帳、還沒繳</h2><div class="sm muted" style="margin-bottom:6px">這是你在核對畫面填了帳單金額，但還沒用「繳費」記一筆轉帳的部分。這跟核對有沒有對上無關。如果其實已經繳過（例如在銀行直接繳、或已另外記過），按「已繳過」就會從這裡移除。</div>${billedH||'<div class="sm muted">沒有</div>'}</div>
+  <div class="card"><h2>本期已刷（還沒出帳）</h2><div class="sm muted" style="margin-bottom:6px">從上個結帳日之後記在信用卡上的支出，標「預記」的是未來日期的分期。</div>${openH||'<div class="sm muted">沒有</div>'}</div>`);
 }
 function cardBurden(){
   const st=S.settings,cards=st.accounts.filter(a=>a.k==='card'&&!a.h);let billed=0,open=0;
@@ -1296,6 +1310,9 @@ const ACTS={
   rcpay:t=>{if(!S.ready)return;const st=S.settings,card=t.dataset.n,b=(st.bills[S.month]||{})[card]||{},rm=Math.max(0,(+b.amt||0)-billPaid(card,S.month)),
     from=st.payFrom&&accNames().includes(st.payFrom)?st.payFrom:(st.accounts.find(x=>x.k==='bank'&&!x.h)||st.accounts.find(x=>x.k!=='card'&&!x.h)||{}).n;
     RC=null;F={mode:'add',t:'x',id:'',a:rm?String(rm):'',ac:from,to:card,d:nowDate(),tm:'',n:card+' '+(+S.month.slice(5))+'月帳單繳費',p:'',bill:S.month};drawAdd()},
+  cdetail:()=>openCardDetail(),
+  cdpaid:t=>{const b=((S.settings.bills[t.dataset.m]||(S.settings.bills[t.dataset.m]={}))[t.dataset.n]||(S.settings.bills[t.dataset.m][t.dataset.n]={}));b.paid=true;commitSettings();render();openCardDetail()},
+  cdpay:t=>{const m=S.month;S.month=t.dataset.m;ACTS.rcpay({dataset:{n:t.dataset.n}});S.month=m},
   rcdone:()=>{closeSheet();RC=null;toast('核對完成 ✓')},
   rcchk:t=>{const st=S.settings,bills=st.bills[S.month]||(st.bills[S.month]={}),b=bills[RC.card]||(bills[RC.card]={}),off=t.dataset.x?(b.inc||(b.inc=[])):(b.off||(b.off=[])),id=t.dataset.id,i=off.indexOf(id);if(i>=0)off.splice(i,1);else off.push(id);commitSettings();const y=$('.sheet').scrollTop;drawRecon();$('.sheet').scrollTop=y},
   rcedit:t=>{RC.back=true;ACTS.edit({dataset:{id:t.dataset.id}})},
