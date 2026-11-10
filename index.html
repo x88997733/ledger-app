@@ -197,6 +197,7 @@ body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;back
 .bub.u{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
 #app{max-width:560px;min-width:0}main>*,#view>*{min-width:0;max-width:100%}
 html,body{overflow-x:hidden}
+input[type=month]{width:100%;min-height:44px;border:0;background:var(--surface);color:var(--ink);border-radius:14px;box-shadow:inset 0 0 0 1px var(--line);padding:8px 12px}
 .hdr{background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
 </style></head><body>
 <div id="login" hidden></div>
@@ -875,7 +876,7 @@ function saveLoan(){
   const sched=pe>0&&per>0&&dd>0&&dd<=31&&LF.startMonth?{periods:pe,per,dueDay:dd,startMonth:LF.startMonth}:null;
   if(!(pr>0)&&sched&&LF.kind==='inst')pr=pe*per;
   if(!(pr>0)){toast('請輸入金額');return}
-  const l={id:LF.id||uid(),kind:LF.kind,name:LF.name.trim(),person:(LF.person||'').trim(),principal:pr,sched,account:LF.account,cat:LF.cat||'貸款',sub:LF.sub||'',pays:LF.pays||[]};
+  const l={id:LF.id||uid(),kind:LF.kind,name:LF.name.trim(),person:(LF.person||'').trim(),principal:pr,sched,account:LF.account,cat:LF.cat||'貸款',sub:LF.sub||'',p:LF.p||'',pays:LF.pays||[]};
   st.loans=st.loans||[];const i=st.loans.findIndex(x=>x.id===l.id);if(i>=0)st.loans[i]=l;else st.loans.push(l);
   st.lastAcc=l.account;commitSettings();closeSheet();render();toast('已儲存');
 }
@@ -904,7 +905,7 @@ function saveLoanPay(){
   const st=S.settings,l=st.loans.find(x=>x.id===LP.id),a=parseFloat($('#lp-a').value.replace(/,/g,'')),d=$('#lp-d').value,ac=$('#lp-ac').value;
   if(!(a>0)||!d){toast('請填金額與日期');return}
   const rid=uid(),out=l.kind==='out';
-  const r={id:rid,t:out?'i':'e',a:out?a:-a,c:out?'收入':(l.cat||'貸款'),s:out?'收款':(l.sub||''),ac,d,tm:new Date().toTimeString().slice(0,5),n:out?`${l.person||l.name} 還款`:`${l.name}${LP.k?' 第'+LP.k+'期':''}`,p:'',o:'',lid:l.id};
+  const r={id:rid,t:out?'i':'e',a:out?a:-a,c:out?'收入':(l.cat||'貸款'),s:out?'收款':(l.sub||''),ac,d,tm:new Date().toTimeString().slice(0,5),n:out?`${l.person||l.name} 還款`:`${l.name}${LP.k?' 第'+LP.k+'期':''}`,p:l.p||'',o:'',lid:l.id};
   const m=monthOf(d);(S.months[m]||(S.months[m]=[])).push(r);
   if(out&&!st.cats.i['收入'])st.cats.i['收入']=['收款'];else if(out&&!st.cats.i['收入'].includes('收款'))st.cats.i['收入'].push('收款');
   (l.pays=l.pays||[]).push({id:uid(),d,a,k:LP.k,rid});
@@ -967,6 +968,10 @@ function drawAdd(){
       if(F.c)h+=`<div class="field"><span>子分類</span><div class="chips">${subs.map(s=>`<button class="chip" aria-pressed="${F.s===s}" data-act="fsub" data-s="${esc(s)}">${esc(s)}</button>`).join('')}<input type="text" id="f-newsub" placeholder="新增子分類" style="width:130px;min-height:36px"></div></div>`}
     h+=`<label class="field"><span>帳戶</span><select id="f-ac">${optsAcc(F.ac)}</select></label>`;
   }
+  if(t==='e'&&accKind(F.ac)==='card'){const I=F.inst||(F.inst={on:false,periods:'',per:'',startMonth:monthOf(F.d||nowDate()),dueDay:String(+(F.d||nowDate()).slice(8))});
+    h+=`<div class="card" style="background:var(--bg);box-shadow:none"><label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="f-ion" ${I.on?'checked':''}><b style="font-weight:500">這是分期付款</b></label>
+    <div class="sm muted" style="margin-top:4px">${I.on?(F.mode==='edit'?'儲存後會刪除這筆一次性支出，改成每期自動記一筆支出到這張卡。':'不會一次記全額，而是每期繳款時才記一筆支出到這張卡，方便和帳單核對。'):'勾選後可以設定期數，每期自動入帳。'}</div>
+    ${I.on?`<div class="grid2" style="margin-top:10px"><label class="field"><span>總期數</span><input type="text" id="f-ip" inputmode="numeric" value="${esc(I.periods)}" placeholder="例如 12"></label><label class="field"><span>每期金額（留空自動平分）</span><input type="text" id="f-iper" inputmode="numeric" value="${esc(I.per)}" placeholder="${F.a&&I.periods?Math.ceil(parseFloat(F.a)/parseInt(I.periods)||0)||'':''}"></label><label class="field"><span>第 1 期月份</span><input type="month" id="f-ism" value="${esc(I.startMonth)}"></label><label class="field"><span>每月幾號</span><input type="text" id="f-idd" inputmode="numeric" value="${esc(I.dueDay)}"></label></div>`:''}</div>`}
   h+=`<div class="grid2"><label class="field"><span>日期</span><input type="date" id="f-d" value="${esc(F.d)}"></label><label class="field"><span>專案（選填）</span><input type="text" id="f-p" list="projs" value="${esc(F.p||'')}"><datalist id="projs">${projs.map(p=>`<option value="${esc(p)}">`).join('')}</datalist></label></div>
   <label class="field"><span>備註</span><input type="text" id="f-n" value="${esc(F.n)}" placeholder="例如：和朋友吃晚餐"></label>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" style="flex:1" data-act="fsave">儲存</button>${F.mode==='add'?'<button class="btn" data-act="fsave" data-again="1">儲存並再記一筆</button>':'<button class="btn d" data-act="fdel">刪除</button>'}</div>`;
@@ -979,6 +984,14 @@ function saveRec(again){
   if((F.t==='e'||F.t==='i')&&!F.c){toast('請選擇分類');return}
   if(F.t==='x'&&F.ac===F.to){toast('轉出和轉入不能是同一個帳戶');return}
   if(!F.d){toast('請選擇日期');return}
+  if(F.t==='e'&&F.inst&&F.inst.on&&accKind(F.ac)==='card'){
+    const I=F.inst,pe=parseInt(I.periods),dd=parseInt(I.dueDay);
+    if(!(pe>=2)){toast('請輸入分期期數（至少 2 期）');return}
+    if(!(dd>=1&&dd<=31)||!I.startMonth){toast('請填每月幾號與第 1 期月份');return}
+    const per=parseFloat(String(I.per).replace(/,/g,''))||Math.ceil(a/pe);
+    const tch=new Set();if(F.mode==='edit'){for(const m in S.months){const n=S.months[m].length;S.months[m]=S.months[m].filter(r=>r.id!==F.id);if(S.months[m].length!==n)tch.add(m)}}
+    (st.loans=st.loans||[]).push({id:uid(),kind:'inst',name:(F.n||F.s||F.c||'分期').trim(),person:'',principal:a,sched:{periods:pe,per,dueDay:dd,startMonth:I.startMonth},account:F.ac,cat:F.c,sub:F.s||'分期',p:F.p||'',pays:[]});
+    st.lastAcc=F.ac;commitSettings();tch.forEach(commitMonth);closeSheet();render();toast('已建立分期，到「帳戶 → 借貸與分期」查看');return}
   const tm=F.tm||new Date().toTimeString().slice(0,5),touched=new Set();
   const removeIds=ids=>{for(const m in S.months){const n=S.months[m].length;S.months[m]=S.months[m].filter(r=>!ids.includes(r.id));if(S.months[m].length!==n)touched.add(m)}};
   const put=r=>{const m=monthOf(r.d);(S.months[m]||(S.months[m]=[])).push(r);touched.add(m)};
@@ -1230,7 +1243,7 @@ const ACTS={
 function findDate(id){for(const m in S.months)if(S.months[m].some(r=>r.id===id))return m+'-01';return S.month+'-01'}
 function syncF(){if(!F)return;const g=id=>document.getElementById(id);
   if(g('f-a'))F.a=g('f-a').value;if(g('f-ac'))F.ac=g('f-ac').value;if(g('f-to'))F.to=g('f-to').value;
-  if(g('f-d'))F.d=g('f-d').value;if(g('f-n'))F.n=g('f-n').value;if(g('f-p'))F.p=g('f-p').value}
+  if(g('f-d'))F.d=g('f-d').value;if(F.inst){if(g('f-ion'))F.inst.on=g('f-ion').checked;if(g('f-ip'))F.inst.periods=g('f-ip').value;if(g('f-iper'))F.inst.per=g('f-iper').value;if(g('f-ism'))F.inst.startMonth=g('f-ism').value;if(g('f-idd'))F.inst.dueDay=g('f-idd').value}if(g('f-n'))F.n=g('f-n').value;if(g('f-p'))F.p=g('f-p').value}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const f=ACTS[t.dataset.act];if(f)f(t,e)});
 document.addEventListener('input',e=>{
   const t=e.target;
@@ -1239,6 +1252,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   const t=e.target;
+  if(F&&F.t!==undefined&&(t.id==='f-ion'||t.id==='f-ac')&&document.getElementById('f-a')){syncF();drawAdd();return}
   if(t.id==='imp'&&t.files[0])onImport(t.files[0]);
   if(t.id==='rest'&&t.files[0])t.files[0].text().then(tx=>{try{
     const o=JSON.parse(tx);if(!o.months||!o.settings)throw 0;
