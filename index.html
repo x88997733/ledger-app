@@ -1373,7 +1373,7 @@ const ACTS={
   add:()=>openAdd(),
   edit:t=>{const id=t.dataset.id;for(const it of items(monthOf(findDate(id)))){if(it.id===id){openAdd(it);return}}},
   close:()=>{closeSheet();if(RC&&RC.back){RC.back=false;drawRecon()}},
-  bg:(t,e)=>{if(e.target===t)closeSheet()},
+  bg:(t,e)=>{if(e.target===t&&BGD)closeSheet()},
   day:t=>{S.day=S.day===t.dataset.d?null:t.dataset.d;render()},
   cty:t=>{S.cty=t.dataset.v;render()},
   scope:t=>{S.scope=t.dataset.v;render()},
@@ -1482,6 +1482,7 @@ function findDate(id){for(const m in S.months)if(S.months[m].some(r=>r.id===id))
 function syncF(){if(!F)return;const g=id=>document.getElementById(id);
   if(g('f-a'))F.a=g('f-a').value;if(g('f-ac'))F.ac=g('f-ac').value;if(g('f-to'))F.to=g('f-to').value;
   if(g('f-d'))F.d=g('f-d').value;if(F.inst){if(g('f-ion'))F.inst.on=g('f-ion').checked;if(g('f-ip'))F.inst.periods=g('f-ip').value;if(g('f-iper'))F.inst.per=g('f-iper').value;if(g('f-ism'))F.inst.startMonth=g('f-ism').value;if(g('f-idd'))F.inst.dueDay=g('f-idd').value}if(g('f-n'))F.n=g('f-n').value;if(g('f-p'))F.p=g('f-p').value}
+let BGD=false;['pointerdown','mousedown','touchstart'].forEach(ev=>document.addEventListener(ev,e=>{BGD=!!(e.target.classList&&e.target.classList.contains('sheetbg'))},true));
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const f=ACTS[t.dataset.act];if(f)f(t,e)});
 document.addEventListener('input',e=>{
   const t=e.target;
