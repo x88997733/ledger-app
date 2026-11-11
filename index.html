@@ -1326,7 +1326,8 @@ function openSettings(){
     <p class="muted sm" style="margin:0">點子分類可以刪除，刪除分類不會刪掉已經記的紀錄。子分類在「記一筆」時直接輸入就會新增。</p></div></details>
   <details open><summary>資料</summary><div>${S.mode==='cloud'?'<button class="btn" data-act="logout">登出</button>':''}
     <button class="btn" data-act="expjson">匯出完整備份（JSON）</button>
-    <label class="btn" style="display:block;text-align:center">從備份還原（JSON）<input type="file" id="rest" accept=".json,application/json" hidden></label></div></details>`);
+    <label class="btn" style="display:block;text-align:center">從備份還原（JSON）<input type="file" id="rest" accept=".json,application/json" hidden></label>
+    <label class="btn" style="display:block;text-align:center">匯入歷史紀錄檔（只新增、重複的略過）<input type="file" id="hist" accept=".json,application/json" hidden></label><div id="impInfo" class="sm"></div></div></details>`);
 }
 
 const subOpts=(cat,sel)=>{const st=S.settings,l=st.cats.e[cat]||st.cats.i[cat]||[];const arr=sel&&!l.includes(sel)?[...l,sel]:l;return `<option value="">（不填）</option>`+arr.map(x=>`<option ${x===sel?'selected':''}>${esc(x)}</option>`).join('')};
@@ -1370,16 +1371,30 @@ async function onImport(file){
       <button class="btn p" style="width:100%;margin-top:10px" data-act="doimp" ${probe.added?'':'disabled'}>${probe.added?'開始匯入':'沒有需要匯入的紀錄'}</button></div>`;
   }catch(e){info.textContent='讀取檔案失敗，請重新選擇。'}
 }
+async function onHist(file){
+  const info=$('#impInfo');
+  try{
+    const j=JSON.parse(await file.text());if(!j||!Array.isArray(j.records)||!j.records.length){info.textContent='這不是歷史紀錄檔，請確認選對檔案。';return}
+    const inc=j.records.map(r=>({...r,ac:r.ac||(j.account&&j.account.n)||'歷史匯入'}));
+    const copy={};for(const m in S.months)copy[m]=S.months[m].slice();
+    const probe=mergeRecords(copy,inc.map(r=>({...r}))),dates=inc.map(r=>r.d).sort();
+    IMP={inc,newAcc:[],acc:j.account||null};
+    info.innerHTML=`<div class="card" style="background:var(--bg)">共 <b class="num">${inc.length}</b> 筆（${dates[0]} ～ ${dates[dates.length-1]}）<br>新增 <b class="num">${probe.added}</b> 筆，已存在 <b class="num">${probe.skipped}</b> 筆略過<br><span class="muted">這些紀錄會放在隱藏帳戶「${esc(inc[0].ac)}」，不會影響你現有帳戶的餘額與資產。</span>
+      <button class="btn p" style="width:100%;margin-top:10px" data-act="doimp" ${probe.added?'':'disabled'}>${probe.added?'開始匯入':'沒有需要匯入的紀錄'}</button></div>`;
+  }catch(e){info.textContent='讀取檔案失敗，請重新選擇。'}
+}
 async function doImport(btn){
   if(!S.ready){toast('帳本還沒讀取完成');return}
   btn.disabled=true;const st=S.settings,{inc,newAcc}=IMP;
+  const AC=IMP.acc,acn=AC&&AC.n,before=acn?(sumByAccount(S.months)[acn]||0):0;
   const res=mergeRecords(S.months,inc);
+  if(AC){let ac=st.accounts.find(x=>x.n===acn);if(!ac){ac={n:acn,k:AC.k||'other',g:AC.g||'其他',h:!!AC.h,init:0};st.accounts.push(ac)}ac.init=(ac.init||0)-((sumByAccount(S.months)[acn]||0)-before)}
   newAcc.forEach(n=>st.accounts.push({n,k:'bank',init:0}));
   for(const r of inc){const k=r.t==='i'?'i':(r.t==='e'||r.t==='fee')?'e':null;if(!k||!r.c)continue;const l=st.cats[k][r.c]||(st.cats[k][r.c]=[]);if(r.s&&!l.includes(r.s))l.push(r.s)}
   commitSettings();const ms=[...res.touched].sort();ms.forEach(commitMonth);
   const total=ms.length+1;progCb=left=>{btn.textContent='寫入中… '+Math.max(0,total-left)+' / '+total};btn.textContent='寫入中…';
   await drain();progCb=null;IMP=null;
-  S.month=ms.length?ms[ms.length-1]:S.month;render();
+  if(!AC)S.month=ms.length?ms[ms.length-1]:S.month;render();
   const info=$('#impInfo');if(info)info.innerHTML=`<div class="card" style="background:var(--bg)">匯入完成，新增 ${res.added} 筆。${newAcc.length?'<br>請到「帳戶」確認各帳戶類型（信用卡請改成「信用卡」），並用「目前實際餘額」校正。':''}</div>`;
 }
 
@@ -1568,6 +1583,7 @@ document.addEventListener('change',e=>{
   if((t.id==='rc-amt'||t.id==='rc-cd'||t.id==='rc-lag')&&RC){setTimeout(()=>{if(!document.getElementById('rc-amt'))return;const y=$('.sheet').scrollTop;rcSave();$('.sheet').scrollTop=y},0);return}
   if(F&&F.t!==undefined&&(t.id==='f-ion'||t.id==='f-ac')&&document.getElementById('f-a')){syncF();drawAdd();return}
   if(t.id==='imp'&&t.files[0])onImport(t.files[0]);
+  if(t.id==='hist'&&t.files[0])onHist(t.files[0]);
   if(t.id==='rest'&&t.files[0])t.files[0].text().then(tx=>{try{
     const o=JSON.parse(tx);if(!o.months||!o.settings)throw 0;
     
