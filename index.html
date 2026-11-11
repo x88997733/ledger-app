@@ -59,7 +59,7 @@ main{padding-top:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
 .rt small{display:block;color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:15px;white-space:nowrap}
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);border-top:1px solid var(--line);
-  display:grid;grid-template-columns:repeat(6,1fr);padding:4px max(8px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-right,0px))}
+  display:grid;grid-template-columns:repeat(4,1fr);padding:4px max(8px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-right,0px))}
 .tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 0;font-size:11.5px;color:var(--muted);border-radius:8px}
 .tabs button[aria-current="page"]{color:var(--accent);font-weight:700}
 .fab{position:fixed;z-index:26;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(68px + env(safe-area-inset-bottom,0px));
@@ -1191,7 +1191,7 @@ function openAcc(name,grp){
   const isStock=k0==='stock',cnt=allRecs().filter(r=>r.ac===name).length;
   openSheet(`<div class="shd"><h3>${a?'編輯項目':'新增項目'}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <label class="field"><span>名稱（銀行名、信用卡名、股票名稱都填這裡）</span><input type="text" id="a-n" value="${esc(name)}" placeholder="例如：台新銀行／玉山 Ubear 卡／0050"></label>
-  <div class="grid2"><label class="field"><span>分組</span><select id="a-g">${groupList().map(n=>`<option ${n===g0?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
+  <div class="grid2"><label class="field"><span>分組</span><select id="a-g">${(a&&a.h?['不再使用']:[]).concat(groupList()).map((n,i)=>`<option ${(a&&a.h?n==='不再使用':n===g0)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
   <label class="field"><span>類型</span><select id="a-k">${Object.entries(ACC_KIND).map(([k,n])=>`<option value="${k}" ${k===k0?'selected':''}>${n}</option>`).join('')}</select></label></div>
   <label class="field"><span>信用卡結帳日（選填；核對帳單時用來算帳單期間）</span><input type="text" id="a-cd" inputmode="numeric" value="${a&&a.cd?a.cd:''}" placeholder="例如 15"></label>
   <label class="field"><span>${a?'目前實際餘額／市值（用來校正，留空不變）':'目前餘額／股票現值'}<br><small class="muted">信用卡請直接填「欠款」的正數，例如 16585，系統會自動當成欠款</small></span><input type="text" id="a-b" inputmode="decimal" class="num" placeholder="${a?(a.k==='card'?fmt(Math.abs(Math.min(0,(a.init||0)+bal))):fmt((a.init||0)+bal)):'0'}"></label>
@@ -1210,7 +1210,7 @@ function saveAcc(){
   let a=st.accounts.find(x=>x.n===old);
   const bal=sumByAccount(S.months)[old]||0;
   if(!a){a={n,k,g,init:0};st.accounts.push(a)}
-  a.k=k;a.g=g;{const cd=parseInt($('#a-cd').value);a.cd=cd>0&&cd<=31?cd:undefined}const h=$('#a-h');if(h)a.h=h.checked;
+  a.k=k;if(g!=='不再使用')a.g=g;{const cd=parseInt($('#a-cd').value);a.cd=cd>0&&cd<=31?cd:undefined}{const h=$('#a-h'),wasH=!!a.h;if(g==='不再使用')a.h=true;else if(wasH)a.h=false;else if(h)a.h=h.checked;if(g!=='不再使用')a.g=g}
   if(b!==''){let v=parseFloat(b.replace(/,/g,'').replace(/[－−–]/g,'-'));if(isFinite(v)){if(k==='card'&&v>0)v=-v;a.init=v-bal}}
   if(old&&n!==old){
     a.n=n;const touched=new Set();
