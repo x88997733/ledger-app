@@ -162,6 +162,7 @@ details>div{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
 .lr select{width:auto;flex:0 1 54%;min-width:0}
 .lr>span:first-child{flex:1 1 38%;overflow-wrap:anywhere}
 textarea{width:100%;border:0;border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);padding:10px 12px;font:inherit;color:inherit;resize:none;min-height:46px}
+.dh{touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;min-width:44px!important}.dragging{position:relative;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:.95}
 .mv{display:flex;gap:4px;flex:none}.mv .btn{min-width:38px;padding:4px 8px;min-height:34px}
 .chat{display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow:auto;padding:2px}
 .bub{padding:9px 13px;border-radius:16px;max-width:88%;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -657,7 +658,7 @@ function monthsLeft(due){if(!due)return null;const t=nowDate(),a=+t.slice(0,4)*1
 function goalCard(g,i,n,bal,hide){
   const cur=goalCur(g,bal),tg=+g.target||0,pct=tg?Math.min(999,Math.round(cur/tg*1000)/10):0,left=Math.max(0,tg-cur),ml=monthsLeft(g.due),reached=tg>0&&cur>=tg;
   const need=!reached&&ml!==null?(ml>0?`距離 ${g.due.slice(0,4)}/${g.due.slice(5)} 還有 ${ml} 個月，每月存 <b class="num">$${fmt(Math.ceil(left/ml))}</b>`:`<span class="exp">已超過目標日期，還差 $${fmt(left)}</span>`):'';
-  return `<div class="card"><div class="lr"><b>${esc(g.name)} <span class="tag2">${esc(g.type||'其他')}</span></b><span class="mv" style="flex:none"><button class="btn s" data-act="gmv" data-id="${esc(g.id)}" data-d="-1" ${i===0?'disabled':''} aria-label="上移">↑</button><button class="btn s" data-act="gmv" data-id="${esc(g.id)}" data-d="1" ${i===n-1?'disabled':''} aria-label="下移">↓</button></span></div>
+  return `<div class="card"><div class="lr"><b>${esc(g.name)} <span class="tag2">${esc(g.type||'其他')}</span></b><span class="mv" style="flex:none"><button class="btn s dh" data-mv="gmv" data-id="${esc(g.id)}" aria-label="拖曳排序">☰</button></span></div>
   <div class="lr" style="margin-top:8px;align-items:baseline"><span class="num${hide}" style="font-size:24px;font-weight:500">$${fmt(cur)}</span><span class="sm muted">目標 <span class="num${hide}">$${fmt(tg)}</span></span></div>
   <div class="bar" style="margin:8px 0"><i style="width:${Math.min(100,pct)}%"></i></div>
   <div class="lr sm"><span class="${reached?'inc':''}"><b>${pct}%</b>${reached?'　已達標 🎉':'　還差 $'+fmt(left)}</span><span class="muted">${g.acc?'連動：'+esc(g.acc):'手動累計'}</span></div>
@@ -1236,7 +1237,7 @@ function drawAlloc(){
   const cats=Object.entries(st.cats.e);
   openSheet(`<div class="shd"><h3>薪資分配設定</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
   <div class="card"><h2>分配比例　<span id="al-sum" class="num ${Math.abs(sum-100)>.01?'exp':'inc'}">${Math.round(sum*10)/10}%</span></h2>
-   ${AL.ratios.map((r,i)=>`<div class="lr" style="margin-bottom:8px"><input type="text" data-rn="${i}" value="${esc(r[0])}" aria-label="帳戶名稱" style="min-width:0"><input type="text" class="pct" style="width:64px!important" inputmode="decimal" data-rp="${i}" value="${r[1]}" aria-label="比例"><span class="muted">%</span><span class="mv"><button class="btn s" data-act="rmv" data-i="${i}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="rmv" data-i="${i}" data-d="1" aria-label="下移">↓</button></span><button class="ibtn" data-act="rdel" data-i="${i}" aria-label="刪除">${icon('x')}</button></div><label class="sm" style="display:flex;gap:8px;align-items:center;margin:-2px 0 12px 4px"><input type="checkbox" data-rc="${i}" ${r[2]?'checked':''}>結餘滾入下月</label>`).join('')}
+   ${AL.ratios.map((r,i)=>`<div class="lr" style="margin-bottom:8px"><input type="text" data-rn="${i}" value="${esc(r[0])}" aria-label="帳戶名稱" style="min-width:0"><input type="text" class="pct" style="width:64px!important" inputmode="decimal" data-rp="${i}" value="${r[1]}" aria-label="比例"><span class="muted">%</span><span class="mv"><button class="btn s dh" data-mv="rmv" data-i="${i}" aria-label="拖曳排序">☰</button></span><button class="ibtn" data-act="rdel" data-i="${i}" aria-label="刪除">${icon('x')}</button></div><label class="sm" style="display:flex;gap:8px;align-items:center;margin:-2px 0 12px 4px"><input type="checkbox" data-rc="${i}" ${r[2]?'checked':''}>結餘滾入下月</label>`).join('')}
    <button class="btn s" data-act="radd">新增分配帳戶</button>
    <p class="muted sm" style="margin:10px 0 0">修改後從「${mLabel(S.month)}」開始生效，之前月份維持當時的設定。勾選「結餘滾入下月」的專案，沒花完（或超支）的錢會帶到下個月。</p></div>
   <div class="card"><h2>薪資基數</h2><label class="field"><span>哪些收入子分類算薪資（用頓號分隔）</span><input type="text" id="al-sal" value="${esc(AL.salary)}"></label>
@@ -1287,9 +1288,9 @@ function openSettings(){
       <label class="field"><span>分類</span><select id="rc-c">${Object.keys(st.cats.e).map(c=>`<option>${esc(c)}</option>`).join('')}<option disabled>── 收入 ──</option>${Object.keys(st.cats.i).map(c=>`<option>${esc(c)}</option>`).join('')}</select></label><label class="field"><span>子分類（選填）</span><select id="rc-s">${subOpts(Object.keys(st.cats.e)[0],'')}</select></label></div>
       <label class="field" style="margin-top:10px"><span>帳戶</span><select id="rc-ac">${optsAcc(st.lastAcc)}</select></label>
       <button class="btn p" style="margin-top:10px;width:100%" data-act="radd2">新增固定收支</button></div></div></details>
-  <details><summary>帳戶分組</summary><div>${groupList().map(g=>`<div class="lr"><input type="text" data-gren="${esc(g)}" value="${esc(g)}" aria-label="分組名稱"><span class="mv"><button class="btn s" data-act="gmv" data-g="${esc(g)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="gmv" data-g="${esc(g)}" data-d="1" aria-label="下移">↓</button></span><button class="btn s d" data-act="gdel" data-g="${esc(g)}">刪除</button></div>`).join('')}<div class="lr"><input type="text" id="g-new" placeholder="新增分組，例如：保險、投資"><button class="btn s" data-act="gadd">新增</button></div><p class="muted sm" style="margin:0">改名會連帶更新裡面的項目；有項目的分組不能刪除。</p></div></details>
+  <details><summary>帳戶分組</summary><div>${groupList().map(g=>`<div class="lr"><input type="text" data-gren="${esc(g)}" value="${esc(g)}" aria-label="分組名稱"><span class="mv"><button class="btn s dh" data-mv="gmv" data-g="${esc(g)}" aria-label="拖曳排序">☰</button></span><button class="btn s d" data-act="gdel" data-g="${esc(g)}">刪除</button></div>`).join('')}<div class="lr"><input type="text" id="g-new" placeholder="新增分組，例如：保險、投資"><button class="btn s" data-act="gadd">新增</button></div><p class="muted sm" style="margin:0">改名會連帶更新裡面的項目；有項目的分組不能刪除。</p></div></details>
   
-  <details><summary>分類管理</summary><div>${['e','i'].map(k=>`<b class="sm">${k==='e'?'支出':'收入'}分類</b>${Object.entries(st.cats[k]).map(([c,ss])=>`<div class="card" style="background:var(--bg);padding:10px;margin:6px 0;box-shadow:none"><div class="lr"><b>${esc(c)}</b><span class="mv"><button class="btn s" data-act="catmv" data-k="${k}" data-c="${esc(c)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="catmv" data-k="${k}" data-c="${esc(c)}" data-d="1" aria-label="下移">↓</button><button class="btn s d" data-act="catdel" data-k="${k}" data-c="${esc(c)}">刪除</button></span></div><div class="chips" style="margin-top:6px">${ss.map(x=>`<button class="chip" style="min-height:30px;font-size:13px;padding:2px 10px" data-act="subdel" data-k="${k}" data-c="${esc(c)}" data-s="${esc(x)}" aria-label="刪除子分類 ${esc(x)}">${esc(x)} ×</button>`).join('')||'<span class="muted sm">沒有子分類</span>'}</div><div class="lr" style="margin-top:8px"><input type="text" data-newsub="${k}|${esc(c)}" placeholder="新增子分類"><button class="btn s" data-act="addsub" data-k="${k}" data-c="${esc(c)}">新增</button></div></div>`).join('')}<div class="lr"><input type="text" data-newcat="${k}" placeholder="新增${k==='e'?'支出':'收入'}主分類"><button class="btn s" data-act="addcat" data-k="${k}">新增</button></div>`).join('')}
+  <details><summary>分類管理</summary><div>${['e','i'].map(k=>`<b class="sm">${k==='e'?'支出':'收入'}分類</b>${Object.entries(st.cats[k]).map(([c,ss])=>`<div class="card" style="background:var(--bg);padding:10px;margin:6px 0;box-shadow:none"><div class="lr"><b>${esc(c)}</b><span class="mv"><button class="btn s dh" data-mv="catmv" data-k="${k}" data-c="${esc(c)}" aria-label="拖曳排序">☰</button><button class="btn s d" data-act="catdel" data-k="${k}" data-c="${esc(c)}">刪除</button></span></div><div class="chips" style="margin-top:6px">${ss.map(x=>`<button class="chip" style="min-height:30px;font-size:13px;padding:2px 10px" data-act="subdel" data-k="${k}" data-c="${esc(c)}" data-s="${esc(x)}" aria-label="刪除子分類 ${esc(x)}">${esc(x)} ×</button>`).join('')||'<span class="muted sm">沒有子分類</span>'}</div><div class="lr" style="margin-top:8px"><input type="text" data-newsub="${k}|${esc(c)}" placeholder="新增子分類"><button class="btn s" data-act="addsub" data-k="${k}" data-c="${esc(c)}">新增</button></div></div>`).join('')}<div class="lr"><input type="text" data-newcat="${k}" placeholder="新增${k==='e'?'支出':'收入'}主分類"><button class="btn s" data-act="addcat" data-k="${k}">新增</button></div>`).join('')}
     <p class="muted sm" style="margin:0">點子分類可以刪除，刪除分類不會刪掉已經記的紀錄。子分類在「記一筆」時直接輸入就會新增。</p></div></details>
   <details open><summary>資料</summary><div>${S.mode==='cloud'?'<button class="btn" data-act="logout">登出</button>':''}
     <label class="btn" style="display:block;text-align:center">匯入 MOZE 匯出的 CSV<input type="file" id="imp" accept=".csv,text/csv" hidden></label>
@@ -1482,6 +1483,29 @@ function findDate(id){for(const m in S.months)if(S.months[m].some(r=>r.id===id))
 function syncF(){if(!F)return;const g=id=>document.getElementById(id);
   if(g('f-a'))F.a=g('f-a').value;if(g('f-ac'))F.ac=g('f-ac').value;if(g('f-to'))F.to=g('f-to').value;
   if(g('f-d'))F.d=g('f-d').value;if(F.inst){if(g('f-ion'))F.inst.on=g('f-ion').checked;if(g('f-ip'))F.inst.periods=g('f-ip').value;if(g('f-iper'))F.inst.per=g('f-iper').value;if(g('f-ism'))F.inst.startMonth=g('f-ism').value;if(g('f-idd'))F.inst.dueDay=g('f-idd').value}if(g('f-n'))F.n=g('f-n').value;if(g('f-p'))F.p=g('f-p').value}
+
+/* drag-to-reorder: handles carry data-mv=<action>; dropping calls the action once per step */
+document.addEventListener('pointerdown',e=>{
+  const h=e.target.closest&&e.target.closest('.dh');if(!h)return;
+  const act=h.dataset.mv,kk=h.dataset.k||'';let row=null,sibs=[];
+  const same=c=>{const x=c.querySelector('.dh');return x&&x.dataset.mv===act&&(x.dataset.k||'')===kk};
+  for(let n=h.parentElement;n&&n.parentElement&&n.id!=='sheetHost';n=n.parentElement){const l=[...n.parentElement.children].filter(same);if(l.length>=2){row=n;sibs=l;break}}
+  if(!row)return;
+  const i0=sibs.indexOf(row);if(i0<0||sibs.length<2)return;
+  e.preventDefault();try{h.setPointerCapture(e.pointerId)}catch(_){}
+  const y0=e.clientY,mids=sibs.map(c=>{const r=c.getBoundingClientRect();return r.top+r.height/2});
+  row.classList.add('dragging');
+  const target=y=>{let t=i0;const c=mids[i0]+(y-y0);let best=1e9;mids.forEach((m,k)=>{const d=Math.abs(m-c);if(d<best){best=d;t=k}});return t};
+  const mv=ev=>{row.style.transform='translateY('+(ev.clientY-y0)+'px)'};
+  const up=ev=>{
+    h.removeEventListener('pointermove',mv);h.removeEventListener('pointerup',up);h.removeEventListener('pointercancel',cn);
+    const t=target(ev.clientY);row.classList.remove('dragging');row.style.transform='';
+    const dir=t>i0?1:-1,n=Math.abs(t-i0),f=ACTS[act];let cur=i0;
+    for(let k=0;k<n;k++){const ds=Object.assign({},h.dataset,{d:String(dir),i:String(cur)});f({dataset:ds});cur+=dir}
+  };
+  const cn=()=>{h.removeEventListener('pointermove',mv);h.removeEventListener('pointerup',up);h.removeEventListener('pointercancel',cn);row.classList.remove('dragging');row.style.transform=''};
+  h.addEventListener('pointermove',mv);h.addEventListener('pointerup',up);h.addEventListener('pointercancel',cn);
+});
 let BGD=false;['pointerdown','mousedown','touchstart'].forEach(ev=>document.addEventListener(ev,e=>{BGD=!!(e.target.classList&&e.target.classList.contains('sheetbg'))},true));
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const f=ACTS[t.dataset.act];if(f)f(t,e)});
 document.addEventListener('input',e=>{
