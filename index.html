@@ -31,6 +31,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15p
   padding-block:0 calc(150px);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));-webkit-text-size-adjust:100%}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);background:var(--bg);z-index:30}
 button,input,select{font:inherit;color:inherit}
+input,select,textarea{font-size:16px!important}
 button{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
@@ -1100,7 +1101,7 @@ function render(){
   $('#hdr').innerHTML=hdrHtml();
   const fn={list:vList,cal:vCal,stats:vStats,alloc:vAlloc,acct:vAcct,stock:vStock,plan:vPlan}[v]||vCal;
   const keep=document.activeElement&&document.activeElement.id==='q';
-  $('#view').innerHTML=bannerHtml()+((v==='stock'||v==='alloc')?`<button class="btn s" data-act="goto" data-v="acct" style="align-self:flex-start">← 返回帳戶</button>`:'')+fn();
+  $('#view').innerHTML=bannerHtml()+((v==='stock'||v==='alloc')?(v==='alloc'?`<button class="btn s" data-act="backset" style="align-self:flex-start">← 返回設定</button>`:`<button class="btn s" data-act="goto" data-v="acct" style="align-self:flex-start">← 返回帳戶</button>`):'')+fn();
   $('#tabs').innerHTML=Object.entries(VIEWS).map(([k,[n,i]])=>`<button data-act="goto" data-v="${k}" ${k===(TABOF[v]||v)?'aria-current="page"':''}>${icon(i)}<span>${n}</span></button>`).join('')+`<button data-act="settings">${icon('gear')}<span>設定</span></button>`;
   if(keep){const q=$('#q');if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
   setSave();
@@ -1356,7 +1357,8 @@ async function doImport(btn){
 
 /* ---------- actions ---------- */
 const ACTS={
-  goalloc:()=>{closeSheet();S.view='alloc';render();scrollTo(0,0)},
+  goalloc:()=>{S.allocBack=S.view==='alloc'?(S.allocBack||'acct'):S.view;closeSheet();S.view='alloc';render();scrollTo(0,0)},
+  backset:()=>{S.view=S.allocBack||'acct';S.allocBack=null;render();scrollTo(0,0);openSettings()},
   goalform:t=>openGoalForm(t.dataset.id),
   gpreset:t=>{syncGF();GF.name=t.dataset.n;GF.type=t.dataset.t;drawGoalForm()},
   gsave:()=>{syncGF();const st=S.settings,num=v=>parseFloat(String(v).replace(/,/g,'')),tg=num(GF.target);
