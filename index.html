@@ -42,7 +42,7 @@ button{cursor:pointer}
 .ibtn:hover{background:var(--accent-soft)}
 .ic{width:22px;height:22px}
 .sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
-.sum div{min-width:0}
+.sum div{min-width:0;text-align:center}
 .lbl{font-size:12px;color:var(--muted);letter-spacing:.06em}
 .sum .num{font-size:17px;font-weight:500;display:block;overflow:hidden;text-overflow:ellipsis}
 .exp{color:var(--exp)} .inc{color:var(--inc)}
@@ -59,7 +59,7 @@ main{padding-top:14px;display:flex;flex-direction:column;gap:14px;min-width:0}
 .rt small{display:block;color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .amt{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:15px;white-space:nowrap}
 .tabs{position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);border-top:1px solid var(--line);
-  display:grid;grid-template-columns:repeat(4,1fr);padding:4px max(8px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-right,0px))}
+  display:grid;grid-template-columns:repeat(5,1fr);padding:4px max(8px,env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-right,0px))}
 .tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:1px;padding:6px 0;font-size:11.5px;color:var(--muted);border-radius:8px}
 .tabs button[aria-current="page"]{color:var(--accent);font-weight:700}
 .fab{position:fixed;z-index:26;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(68px + env(safe-area-inset-bottom,0px));
@@ -482,7 +482,7 @@ function listBlock(its){
 /* ---------- views ---------- */
 function hdrHtml(){
   const t=monthTotals(recs(S.month));
-  return `<div class="mrow"><button class="ibtn" data-act="mon" data-n="-1" aria-label="上個月">${icon('prev')}</button><h1>${mLabel(S.month)}</h1><button class="ibtn" data-act="mon" data-n="1" aria-label="下個月">${icon('next')}</button><button class="ibtn" data-act="settings" aria-label="設定">${icon('gear')}</button></div>
+  return `<div class="mrow"><button class="ibtn" data-act="mon" data-n="-1" aria-label="上個月">${icon('prev')}</button><h1>${mLabel(S.month)}</h1><button class="ibtn" data-act="mon" data-n="1" aria-label="下個月">${icon('next')}</button></div>
   <div class="sum"><div><span class="lbl">支出</span><span class="num exp">${fmt(t.e)}</span></div><div><span class="lbl">收入</span><span class="num inc">${fmt(t.i)}</span></div><div><span class="lbl">結餘</span><span class="num">${t.i-t.e<0?'−':''}${fmt(Math.abs(t.i-t.e))}</span></div></div>`;
 }
 function bannerHtml(){
@@ -1097,7 +1097,7 @@ function render(){
   const fn={list:vList,cal:vCal,stats:vStats,alloc:vAlloc,acct:vAcct,stock:vStock,plan:vPlan}[v]||vCal;
   const keep=document.activeElement&&document.activeElement.id==='q';
   $('#view').innerHTML=bannerHtml()+((v==='stock'||v==='alloc')?`<button class="btn s" data-act="goto" data-v="acct" style="align-self:flex-start">← 返回帳戶</button>`:'')+fn();
-  $('#tabs').innerHTML=Object.entries(VIEWS).map(([k,[n,i]])=>`<button data-act="goto" data-v="${k}" ${k===(TABOF[v]||v)?'aria-current="page"':''}>${icon(i)}<span>${n}</span></button>`).join('');
+  $('#tabs').innerHTML=Object.entries(VIEWS).map(([k,[n,i]])=>`<button data-act="goto" data-v="${k}" ${k===(TABOF[v]||v)?'aria-current="page"':''}>${icon(i)}<span>${n}</span></button>`).join('')+`<button data-act="settings">${icon('gear')}<span>設定</span></button>`;
   if(keep){const q=$('#q');if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
   setSave();
 }
