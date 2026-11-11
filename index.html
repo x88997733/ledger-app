@@ -1286,7 +1286,7 @@ function openSettings(){
   <details><summary>帳戶分組</summary><div>${groupList().map(g=>`<div class="lr"><input type="text" data-gren="${esc(g)}" value="${esc(g)}" aria-label="分組名稱"><span class="mv"><button class="btn s" data-act="gmv" data-g="${esc(g)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="gmv" data-g="${esc(g)}" data-d="1" aria-label="下移">↓</button></span><button class="btn s d" data-act="gdel" data-g="${esc(g)}">刪除</button></div>`).join('')}<div class="lr"><input type="text" id="g-new" placeholder="新增分組，例如：保險、投資"><button class="btn s" data-act="gadd">新增</button></div><p class="muted sm" style="margin:0">改名會連帶更新裡面的項目；有項目的分組不能刪除。</p></div></details>
   <details><summary>每月預算（依支出分類）</summary><div>${expCats.map(c=>`<div class="lr"><span>${esc(c)}</span><input type="text" class="pct" inputmode="numeric" data-bud="${esc(c)}" value="${st.budgets[c]||''}" placeholder="不設定"></div>`).join('')}</div></details>
   <details><summary>固定收支（每月自動入帳）</summary><div>
-    ${st.recurring.length?st.recurring.map(it=>`<div class="lr"><span><b>${esc(it.n)}</b><br><small class="muted">${(it.every||1)===1?'每月':'每 '+it.every+' 個月'} ${it.day} 日${(it.every||1)>1?'（第一次 '+it.from+'）':''} · ${it.t==='e'?'支出':'收入'} ${fmt(it.a)} · ${esc(it.ac)}${it.on?'':' · 已停用'}</small></span><button class="btn s" data-act="rtoggle" data-id="${esc(it.id)}">${it.on?'停用':'啟用'}</button><button class="btn s d" data-act="rdelx" data-id="${esc(it.id)}">刪除</button></div>`).join(''):'<div class="muted sm">還沒有固定收支，例如房租、訂閱、薪水。</div>'}
+    ${st.recurring.length?st.recurring.map(it=>`<div class="lr"><span><b>${esc(it.n)}</b><br><small class="muted">${(it.every||1)===1?'每月':'每 '+it.every+' 個月'} ${it.day} 日${(it.every||1)>1?'（第一次 '+it.from+'）':''} · ${it.t==='e'?'支出':'收入'} ${fmt(it.a)} · ${esc(it.ac)}${it.on?'':' · 已停用'}</small></span><button class="btn s" data-act="redit" data-id="${esc(it.id)}">編輯</button><button class="btn s" data-act="rtoggle" data-id="${esc(it.id)}">${it.on?'停用':'啟用'}</button><button class="btn s d" data-act="rdelx" data-id="${esc(it.id)}">刪除</button></div>`).join(''):'<div class="muted sm">還沒有固定收支，例如房租、訂閱、薪水。</div>'}
     <div class="card" style="background:var(--bg)"><div class="grid2"><label class="field"><span>名稱</span><input type="text" id="rc-n" placeholder="例如：房租"></label><label class="field"><span>金額</span><input type="text" id="rc-a" inputmode="numeric"></label>
       <label class="field"><span>類型</span><select id="rc-t"><option value="e">支出</option><option value="i">收入</option></select></label><label class="field"><span>幾號</span><input type="text" id="rc-d" inputmode="numeric" value="1"></label>
       <label class="field"><span>多久繳一次</span><select id="rc-e">${[[1,'每個月'],[2,'每 2 個月'],[3,'每季（3 個月）'],[6,'每半年'],[12,'每年']].map(([v,n])=>`<option value="${v}">${n}</option>`).join('')}</select></label><label class="field"><span>第一次入帳月份</span><input type="month" id="rc-f" value="${monthOf(nowDate())}"></label>
@@ -1295,6 +1295,21 @@ function openSettings(){
       <button class="btn p" style="margin-top:10px;width:100%" data-act="radd2">新增固定收支</button></div></div></details>
   <details><summary>分類管理</summary><div>${['e','i'].map(k=>`<b class="sm">${k==='e'?'支出':'收入'}分類</b>${Object.entries(st.cats[k]).map(([c,ss])=>`<div class="card" style="background:var(--bg);padding:10px;margin:6px 0;box-shadow:none"><div class="lr"><b>${esc(c)}</b><span class="mv"><button class="btn s" data-act="catmv" data-k="${k}" data-c="${esc(c)}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="catmv" data-k="${k}" data-c="${esc(c)}" data-d="1" aria-label="下移">↓</button><button class="btn s d" data-act="catdel" data-k="${k}" data-c="${esc(c)}">刪除</button></span></div><div class="chips" style="margin-top:6px">${ss.map(x=>`<button class="chip" style="min-height:30px;font-size:13px;padding:2px 10px" data-act="subdel" data-k="${k}" data-c="${esc(c)}" data-s="${esc(x)}" aria-label="刪除子分類 ${esc(x)}">${esc(x)} ×</button>`).join('')||'<span class="muted sm">沒有子分類</span>'}</div></div>`).join('')}<div class="lr"><input type="text" data-newcat="${k}" placeholder="新增${k==='e'?'支出':'收入'}主分類"><button class="btn s" data-act="addcat" data-k="${k}">新增</button></div>`).join('')}
     <p class="muted sm" style="margin:0">點子分類可以刪除，刪除分類不會刪掉已經記的紀錄。子分類在「記一筆」時直接輸入就會新增。</p></div></details>`);
+}
+
+function openRecEdit(id){
+  const st=S.settings,it=st.recurring.find(x=>x.id===id);if(!it)return;
+  const cats=it.t==='e'?Object.keys(st.cats.e):Object.keys(st.cats.i);
+  openSheet(`<div class="shd"><h3>編輯固定收支</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
+  <div class="grid2"><label class="field"><span>名稱</span><input type="text" id="re-n" value="${esc(it.n)}"></label><label class="field"><span>金額</span><input type="text" id="re-a" inputmode="numeric" value="${it.a}"></label>
+  <label class="field"><span>幾號</span><input type="text" id="re-d" inputmode="numeric" value="${it.day}"></label>
+  <label class="field"><span>多久繳一次</span><select id="re-e">${[[1,'每個月'],[2,'每 2 個月'],[3,'每季（3 個月）'],[6,'每半年'],[12,'每年']].map(([v,n])=>`<option value="${v}" ${(it.every||1)===v?'selected':''}>${n}</option>`).join('')}</select></label>
+  <label class="field"><span>第一次入帳月份</span><input type="month" id="re-f" value="${esc(it.from||'')}"></label>
+  <label class="field"><span>分類</span><select id="re-c">${cats.map(c=>`<option ${c===it.c?'selected':''}>${esc(c)}</option>`).join('')}</select></label>
+  <label class="field"><span>子分類</span><input type="text" id="re-s" value="${esc(it.s||'')}"></label>
+  <label class="field"><span>帳戶</span><select id="re-ac">${optsAcc(it.ac)}</select></label></div>
+  <div class="sm muted">已經自動記好的紀錄不會被改，修改只對還沒入帳的月份有效。</div>
+  <button class="btn p" data-act="resave" data-id="${esc(id)}">儲存</button>`);
 }
 function download(name,data){
   const u=URL.createObjectURL(new Blob([data],{type:'text/plain;charset=utf-8'})),a=document.createElement('a');
@@ -1436,6 +1451,11 @@ const ACTS={
   expcsv:()=>download('記帳匯出.csv',toMozeCSV(S.months)),
   expjson:()=>download('記帳備份.json',JSON.stringify({v:1,settings:S.settings,months:S.months})),
   doimp:t=>doImport(t),
+  redit:t=>openRecEdit(t.dataset.id),
+  resave:t=>{const st=S.settings,it=st.recurring.find(x=>x.id===t.dataset.id);if(!it)return;
+    const a=parseFloat($('#re-a').value.replace(/,/g,'')),n=$('#re-n').value.trim();if(!n||!isFinite(a)||a<=0){toast('請填名稱和金額');return}
+    Object.assign(it,{n,a,day:Math.min(31,Math.max(1,parseInt($('#re-d').value)||1)),every:parseInt($('#re-e').value)||1,from:$('#re-f').value||it.from,c:$('#re-c').value,s:$('#re-s').value.trim(),ac:$('#re-ac').value});
+    commitSettings();ensureRecurring();closeSheet();render();openSettings();toast('已儲存')},
   rtoggle:t=>{const it=S.settings.recurring.find(x=>x.id===t.dataset.id);if(it){it.on=!it.on;if(it.on)it.from=it.from||monthOf(nowDate());commitSettings();openSettings()}},
   rdelx:t=>{S.settings.recurring=S.settings.recurring.filter(x=>x.id!==t.dataset.id);commitSettings();openSettings()},
   radd2:()=>{
