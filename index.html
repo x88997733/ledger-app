@@ -1,30 +1,31 @@
 <!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0A0F1C"><link rel="manifest" href="manifest.json"><link rel="icon" href="icon.svg">
-<title>我的記帳本</title>
+<meta name="theme-color" content="#0F1411"><link rel="manifest" href="manifest.json"><link rel="icon" href="icon.svg">
+<title>金流手帳</title>
 
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@300;400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=Noto+Serif+TC:wght@600;700&family=JetBrains+Mono:wght@300;400;500&display=swap">
 <style>
 /* Layout: one narrow ledger column (phone first), sticky month header, five-tab bar, floating "記一筆" button.
    Ink-blue accent on a green-grey paper neutral; red/green are reserved for expense/income. */
+/* 金流手帳 palette: forest green + amber on warm paper (light) / deep moss (dark) */
 :root{
-  --bg:#0A0F1C; --surface:#121A2B; --ink:#E6EDF7; --muted:#8A9AB5; --line:#1F2B44;
-  --accent:#22D3EE; --on-accent:#04121A; --accent-soft:#12283A; --accent2:#8B5CF6;
-  --inc:#34D399; --exp:#FB7185; --net:#A78BFA; --warn:#FBBF24; --dot-l:62%;
-  --shadow:0 0 0 1px rgba(34,211,238,.07),0 10px 30px rgba(0,0,0,.35); --glow:rgba(34,211,238,.35);
+  --bg:#0F1411; --surface:#171F1A; --ink:#EAF0E7; --muted:#92A396; --line:#26332B;
+  --accent:#6CC59A; --on-accent:#08170F; --accent-soft:#16291F; --accent2:#E0B04F;
+  --inc:#7BD389; --exp:#F0806F; --net:#D8B4FE; --warn:#E8B04A; --dot-l:62%;
+  --shadow:0 1px 0 rgba(255,255,255,.03),0 10px 28px rgba(0,0,0,.32); --glow:rgba(108,197,154,.3);
   --sans:'Noto Sans TC','PingFang TC','Microsoft JhengHei',system-ui,sans-serif;
-  --serif:'Space Grotesk','Noto Sans TC','PingFang TC',system-ui,sans-serif;
+  --serif:'Noto Serif TC','Songti TC','PMingLiU',serif;
   --mono:'JetBrains Mono','Noto Sans TC',ui-monospace,monospace; color-scheme:dark;
 }
 @media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
-  --bg:#EEF3FA; --surface:#FFFFFF; --ink:#0F1B2D; --muted:#566782; --line:#D7E0EE;
-  --accent:#0891B2; --on-accent:#FFFFFF; --accent-soft:#DFF3F8; --accent2:#7C3AED;
-  --inc:#059669; --exp:#E11D48; --net:#7C3AED; --warn:#B45309; --dot-l:46%;
-  --shadow:0 1px 2px rgba(15,27,45,.06),0 8px 24px rgba(15,27,45,.07); --glow:rgba(8,145,178,.25); color-scheme:light}}
+  --bg:#F5F0E4; --surface:#FFFDF8; --ink:#22301F; --muted:#687462; --line:#E3DBC8;
+  --accent:#2F6B4F; --on-accent:#FFFFFF; --accent-soft:#E2EDE3; --accent2:#B7791F;
+  --inc:#2E7D4F; --exp:#C2442F; --net:#7A5AA6; --warn:#A15C07; --dot-l:46%;
+  --shadow:0 1px 2px rgba(60,50,20,.06),0 8px 22px rgba(60,50,20,.07); --glow:rgba(47,107,79,.2); color-scheme:light}}
 :root[data-theme="light"]{
-  --bg:#EEF3FA; --surface:#FFFFFF; --ink:#0F1B2D; --muted:#566782; --line:#D7E0EE;
-  --accent:#0891B2; --on-accent:#FFFFFF; --accent-soft:#DFF3F8; --accent2:#7C3AED;
-  --inc:#059669; --exp:#E11D48; --net:#7C3AED; --warn:#B45309; --dot-l:46%;
-  --shadow:0 1px 2px rgba(15,27,45,.06),0 8px 24px rgba(15,27,45,.07); --glow:rgba(8,145,178,.25); color-scheme:light}
+  --bg:#F5F0E4; --surface:#FFFDF8; --ink:#22301F; --muted:#687462; --line:#E3DBC8;
+  --accent:#2F6B4F; --on-accent:#FFFFFF; --accent-soft:#E2EDE3; --accent2:#B7791F;
+  --inc:#2E7D4F; --exp:#C2442F; --net:#7A5AA6; --warn:#A15C07; --dot-l:46%;
+  --shadow:0 1px 2px rgba(60,50,20,.06),0 8px 22px rgba(60,50,20,.07); --glow:rgba(47,107,79,.2); color-scheme:light}
 *{box-sizing:border-box}
 html,body{min-height:100%}
 body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.5;
@@ -92,9 +93,9 @@ input[type=text],input[type=date],select,input[type=search]{width:100%;min-heigh
 .bar.over i{background:var(--exp)}
 .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .cal .wd{font-size:12px;color:var(--muted);text-align:center;padding:2px 0}
-.cal button{border:1px solid var(--line);background:var(--surface);border-radius:8px;min-height:62px;padding:4px 2px;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;font-size:13px}
+.cal button{border:0;background:var(--heat,transparent);border-radius:14px;min-height:62px;padding:4px 2px;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;font-size:13px}
 .cal button.sel{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
-.cal button.today b{color:var(--accent)}
+.cal button b{font-family:var(--serif);font-weight:600}.cal button.today b{background:var(--accent);color:var(--on-accent);border-radius:999px;min-width:24px;padding:0 6px;line-height:24px;text-align:center}
 .cal button small{font-size:10px;line-height:1.15;font-family:var(--mono);max-width:100%;overflow:hidden}
 .cal .blank{visibility:hidden}
 svg.chart{width:100%;height:auto;display:block}
@@ -171,13 +172,12 @@ textarea{width:100%;border:0;border-radius:14px;background:var(--surface);box-sh
 .bub.a{align-self:flex-start;background:var(--surface);box-shadow:var(--shadow)}
 .prop{align-self:stretch;background:var(--accent-soft);border-radius:16px;padding:12px}
 
-/* 科技感：深色底、青紫霓虹、玻璃卡片、等寬數字 */
-body{background-image:radial-gradient(800px 460px at 88% -8%,rgba(34,211,238,.13),transparent 62%),radial-gradient(640px 380px at -8% 12%,rgba(139,92,246,.12),transparent 60%);background-attachment:fixed}
-body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:44px 44px;opacity:.28;-webkit-mask-image:linear-gradient(180deg,#000,transparent 70%);mask-image:linear-gradient(180deg,#000,transparent 70%)}
+/* 手帳質感：紙色底、柔和卡片、襯線標題、等寬數字 */
+body{background-image:radial-gradient(700px 400px at 90% -10%,color-mix(in srgb,var(--accent) 12%,transparent),transparent 65%);background-attachment:fixed}
 #app,.tabs,.fab{position:relative;z-index:1}.tabs,.fab{position:fixed}
 .num,.amt{font-family:var(--mono);font-weight:400;letter-spacing:-.02em}
 .card,.rows,details{border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 94%,#fff 6%),var(--surface))}
-.mrow h1,.card h2,.sheet h3{font-weight:700;letter-spacing:.06em}
+.mrow h1,.card h2,.sheet h3{font-family:var(--serif);font-weight:700;letter-spacing:.04em}
 .mrow h1{font-size:18px;text-transform:uppercase}
 .lbl{text-transform:uppercase;letter-spacing:.12em;font-size:11px}
 .tabs{background:color-mix(in srgb,var(--surface) 86%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.25)}
@@ -387,7 +387,7 @@ function showLogin(msg){
   $('#app').hidden=true;$('#tabs').hidden=true;$('#fab').hidden=true;
   const el=$('#login');el.hidden=false;
   el.innerHTML=`<div class="card" style="max-width:420px;margin:12vh auto 0;display:flex;flex-direction:column;gap:12px">
-   <h2 style="font-size:22px;margin:0">我的記帳本</h2><p class="muted" style="margin:0">登入後資料會存在雲端，換手機或電腦都在。</p>
+   <h2 style="font-size:24px;margin:0;font-family:var(--serif)">金流手帳</h2><p class="muted" style="margin:0">登入後資料會存在雲端，換手機或電腦都在。</p>
    <button class="btn p" id="gbtn">用 Google 登入</button>
    <div class="muted sm" style="text-align:center">或用 Email 收登入連結</div>
    <input type="text" id="em" inputmode="email" placeholder="you@example.com" autocomplete="email">
@@ -517,10 +517,10 @@ function vCal(){
 function vCalGrid(){
   const m=S.month,y=+m.slice(0,4),mo=+m.slice(5)-1,dim=new Date(y,mo+1,0).getDate(),first=new Date(y,mo,1).getDay();
   const per={};for(const r of recs(m)){const o=per[r.d]||(per[r.d]={e:0,i:0});if(isExp(r))o.e+=-r.a;else if(isInc(r))o.i+=r.a}
-  const today=nowDate();let cells='';
+  const today=nowDate();let cells='';const mx=Math.max(1,...Object.values(per).map(o=>o.e));
   for(let i=0;i<first;i++)cells+='<button class="blank" tabindex="-1" aria-hidden="true"></button>';
   for(let d=1;d<=dim;d++){const ds=m+'-'+String(d).padStart(2,'0'),o=per[ds]||{e:0,i:0};
-    cells+=`<button data-act="day" data-d="${ds}" class="${S.day===ds?'sel':''} ${ds===today?'today':''}"><b>${d}</b><small class="exp">${o.e?cmp(o.e):''}</small><small class="inc">${o.i?cmp(o.i):''}</small></button>`}
+    cells+=`<button data-act="day" data-d="${ds}" style="${o.e?'--heat:color-mix(in srgb,var(--exp) '+Math.max(8,Math.round(o.e/mx*34))+'%,transparent)':''}" class="${S.day===ds?'sel':''} ${ds===today?'today':''}"><b>${d}</b><small class="exp">${o.e?cmp(o.e):''}</small><small class="inc">${o.i?cmp(o.i):''}</small></button>`}
   const sel=S.day&&S.day.startsWith(m)?items(m).filter(i=>i.d===S.day):[];
   return `<div class="card"><div class="cal">${'日一二三四五六'.split('').map(w=>`<div class="wd">${w}</div>`).join('')}${cells}</div></div>`+
     (S.day&&S.day.startsWith(m)?(sel.length?listBlock(sel):`<div class="card muted" style="text-align:center">${S.day.slice(5).replace('-','/')} 沒有紀錄</div>`)+`<button class="btn p" style="margin-top:10px" data-act="add">＋ 在 ${S.day.slice(5).replace('-','/')} 記一筆</button>`:`<div class="muted sm" style="text-align:center">點日期可以看當天明細</div>`);
