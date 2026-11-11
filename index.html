@@ -560,11 +560,37 @@ function vStats(){
     const bars=ms.map((x,i)=>{const h=Math.round(tot[i]/mx*86),X=10+i*bx;return `<g data-act="pickm" data-m="${x}" style="cursor:pointer" role="button" aria-label="${mLabel(x)} ${fmt(tot[i])}"><rect x="${X}" y="0" width="${bx}" height="${H}" fill="transparent"/><rect x="${X+4}" y="${108-h}" width="${bx-8}" height="${Math.max(h,1)}" rx="3" style="fill:${x===m?(ty==='e'?'var(--exp)':'var(--inc)'):'var(--line)'}"/><text x="${X+bx/2}" y="${100-h}" style="font-size:8.5px">${tot[i]?cmp(tot[i]):''}</text><text x="${X+bx/2}" y="126" style="font-size:9px">${+x.slice(5)}月</text></g>`}).join('');
     const detail=Object.entries(subs).sort((a,b)=>b[1]-a[1]);const dm=detail[0]?detail[0][1]:1;
     const scopeName=S.scope==='m'?mLabel(m):S.scope==='y'?m.slice(0,4)+' 年':'全部期間';
+    const cmpHtml=(()=>{
+      if(S.scope==='a')return `<div class="card"><h2>變化分析</h2><div class="muted sm">切換到「這個月」或「今年」，就會幫你比較哪些分類增加、哪些減少。</div></div>`;
+      const nd=nowDate(),nY=+nd.slice(0,4),nM=+nd.slice(5,7);let curR,prevR,lbl,plbl;
+      if(S.scope==='m'){curR=recs(m);prevR=recs(monthAdd(m,-1));lbl='比上個月';plbl='上個月'}
+      else{const y=+m.slice(0,4),last=y<nY?12:(y===nY?nM:12),pick12=yy=>{let o=[];for(let k=1;k<=last;k++)o=o.concat(recs(yy+'-'+String(k).padStart(2,'0')));return o};
+        curR=pick12(y);prevR=pick12(y-1);lbl=(y>=nY?'比去年同期（1–'+last+'月）':'比前一年');plbl=(y-1)+' 年'+(y>=nY?'同期':'')}
+      const agg=rs=>{const c={},sb={};rs.filter(pick).forEach(r=>{const k=r.c||'未分類',kk=k+'\u0000'+(r.s||'未分類');c[k]=(c[k]||0)+r.a*sg;sb[kk]=(sb[kk]||0)+r.a*sg});return{c,sb}};
+      const A=agg(curR),B=agg(prevR),tc=Object.values(A.c).reduce((x,y)=>x+y,0),tp=Object.values(B.c).reduce((x,y)=>x+y,0);
+      if(!tc&&!tp)return `<div class="card"><h2>變化分析</h2><div class="muted sm">這個期間還沒有資料可以比較。</div></div>`;
+      const dl=(a,b)=>{const ks=new Set([...Object.keys(a),...Object.keys(b)]);return[...ks].map(k=>({k,cur:a[k]||0,prev:b[k]||0,d:(a[k]||0)-(b[k]||0)}))};
+      const rows=dl(A.c,B.c),up=rows.filter(x=>x.d>0).sort((x,y)=>y.d-x.d),dn=rows.filter(x=>x.d<0).sort((x,y)=>x.d-y.d);
+      const good=d=>ty==='e'?d<0:d>0,col=d=>d===0?'var(--muted)':good(d)?'var(--inc)':'var(--exp)',sgn=d=>d>0?'+':'−';
+      const pc=(c,pv)=>pv?Math.round(Math.abs(c-pv)/pv*100)+'%':'新增';
+      const nm=ty==='e'?'支出':'收入',dT=tc-tp;
+      const names=l=>l.slice(0,3).map(x=>`${esc(x.k)}（${sgn(x.d)}$${fmt(Math.abs(x.d))}）`).join('、');
+      const sum=`${nm}${lbl}${dT>0?'增加':dT<0?'減少':'沒有變化'}${dT?` $${fmt(Math.abs(dT))}（${tp?sgn(dT)+pc(tc,tp):'上期無資料'}）`:''}。`+(up.length?`${ty==='e'?'變多':'成長'}的主要是 ${names(up)}`:'')+(up.length&&dn.length?'；':'')+(dn.length?`${ty==='e'?'變少':'減少'}的有 ${names(dn)}`:'')+(up.length||dn.length?'。':'');
+      const open=S.cmpOpen||'';
+      const rowH=x=>{const o=open===x.k,subs=o?dl(Object.fromEntries(Object.entries(A.sb).filter(([k])=>k.split('\u0000')[0]===x.k).map(([k,v])=>[k.split('\u0000')[1],v])),Object.fromEntries(Object.entries(B.sb).filter(([k])=>k.split('\u0000')[0]===x.k).map(([k,v])=>[k.split('\u0000')[1],v]))).filter(y=>y.d).sort((a,b)=>Math.abs(b.d)-Math.abs(a.d)).slice(0,6):[];
+        return `<button class="row" style="padding:8px 0;border:0;background:none;width:100%" data-act="cmpopen" data-c="${esc(x.k)}" aria-expanded="${o}">${cic(x.k)}<span class="rt"><b>${esc(x.k)}</b><small class="num">$${fmt(x.prev)} → $${fmt(x.cur)}</small></span><span class="amt" style="color:${col(x.d)}">${sgn(x.d)}$${fmt(Math.abs(x.d))}<br><small>${pc(x.cur,x.prev)}</small></span></button>`+(o?`<div style="margin:0 0 8px 44px">${subs.map(y=>`<div class="lr sm" style="padding:3px 0"><span class="muted">${esc(y.k)}</span><span class="num" style="color:${col(y.d)}">${sgn(y.d)}$${fmt(Math.abs(y.d))}</span></div>`).join('')||'<div class="muted sm">沒有細項變化</div>'}</div>`:'')};
+      return `<div class="card"><h2>變化分析　<span class="muted sm" style="font-weight:400">${lbl}</span></h2>
+      <p style="margin:0 0 10px;line-height:1.7">${sum}</p>
+      <div class="lr sm" style="padding:6px 0;border-top:1px solid var(--line)"><span>${plbl} $${fmt(tp)}</span><span>本期 $${fmt(tc)}</span></div>
+      ${up.length?`<div class="lbl" style="margin-top:6px">${ty==='e'?'花得比較多':'比較多'}</div>${up.slice(0,5).map(rowH).join('')}`:''}
+      ${dn.length?`<div class="lbl" style="margin-top:10px">${ty==='e'?'花得比較少':'比較少'}</div>${dn.slice(0,5).map(rowH).join('')}`:''}
+      <div class="muted sm" style="margin-top:6px">點分類可以看裡面哪個細項在變動。</div></div>`})();
     body=`<div class="seg" role="group" aria-label="類型"><button aria-pressed="${ty==='e'}" data-act="cty" data-v="e">支出</button><button aria-pressed="${ty==='i'}" data-act="cty" data-v="i">收入</button></div>
     <div class="card"><h2>每月${ty==='e'?'花費':'收入'}總金額</h2><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="近十二個月${ty==='e'?'支出':'收入'}長條圖，點長條切換月份">${bars}</svg><div class="muted sm" style="text-align:center">點長條可以切換到那個月</div></div>
     <div class="seg" role="group" aria-label="範圍">${[['m','這個月'],['y','今年'],['a','全部']].map(([k,n])=>`<button aria-pressed="${S.scope===k}" data-act="scope" data-v="${k}">${n}</button>`).join('')}</div>
-    <div class="card"><h2>${scopeName}　${ty==='e'?'支出':'收入'}比例</h2>${total>0?`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center"><svg viewBox="0 0 140 140" style="width:150px;flex:none" role="img" aria-label="${ty==='e'?'支出':'收入'}比例甜甜圈圖"><circle cx="70" cy="70" r="${R}" fill="none" stroke-width="22" style="stroke:var(--line)" opacity=".5"/>${arcs}<text x="70" y="66" text-anchor="middle" style="font-size:9px;fill:var(--muted)">合計</text><text x="70" y="82" text-anchor="middle" style="font-size:14px;fill:var(--ink)">${cmp(total)}</text></svg>
+    <div class="card"><h2>${S.scope==='y'?`<button class="ibtn" data-act="yshift" data-d="-1" aria-label="前一年">${icon('prev')}</button> `:''}${scopeName}　${ty==='e'?'支出':'收入'}比例${S.scope==='y'?` <button class="ibtn" data-act="yshift" data-d="1" aria-label="後一年">${icon('next')}</button>`:''}</h2>${total>0?`<div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:center"><svg viewBox="0 0 140 140" style="width:150px;flex:none" role="img" aria-label="${ty==='e'?'支出':'收入'}比例甜甜圈圖"><circle cx="70" cy="70" r="${R}" fill="none" stroke-width="22" style="stroke:var(--line)" opacity=".5"/>${arcs}<text x="70" y="66" text-anchor="middle" style="font-size:9px;fill:var(--muted)">合計</text><text x="70" y="82" text-anchor="middle" style="font-size:14px;fill:var(--ink)">${cmp(total)}</text></svg>
       <div style="flex:1;min-width:150px">${cats.map(([c,v])=>`<div class="lr" style="padding:4px 0"><span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="dot" style="--h:${ph(c)}"></span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c)}</span></span><span class="num sm" style="flex:none;text-align:right">${(v/total*100).toFixed(1)}%<br><span class="muted">$${fmt(v)}</span></span></div>`).join('')}</div></div>`:'<div class="muted" style="text-align:center;padding:16px">這個範圍沒有資料</div>'}</div>
+    ${cmpHtml}
     <div class="card"><h2>各明細總金額</h2>${detail.map(([k,v])=>`<div class="lr" style="padding:5px 0"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(k)}</span><span class="num" style="flex:none">$${fmt(v)}</span></div><div class="bar"><i style="width:${v/dm*100}%"></i></div>`).join('<div style="height:4px"></div>')||'<div class="muted" style="text-align:center">沒有資料</div>'}</div>`;
   }else if(S.rep==='cat'){
     const ty=S.stat,rs=mr.filter(r=>ty==='e'?isExp(r):isInc(r)),total=rs.reduce((s,r)=>s+r.a*(ty==='e'?-1:1),0);
@@ -1383,6 +1409,8 @@ const ACTS={
   cty:t=>{S.cty=t.dataset.v;render()},
   scope:t=>{S.scope=t.dataset.v;render()},
   pickm:t=>{S.month=t.dataset.m;render()},
+  yshift:t=>{S.month=monthAdd(S.month,12*+t.dataset.d);S.day=null;render()},
+  cmpopen:t=>{S.cmpOpen=S.cmpOpen===t.dataset.c?'':t.dataset.c;render()},
   srange:t=>{S.srange=+t.dataset.v;render()},
   sync:()=>syncPrices(true),
   assist:()=>openAssist(),
