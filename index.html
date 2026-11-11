@@ -1235,7 +1235,7 @@ function drawAlloc(){
   const sel=(key)=>`<select data-map="${esc(key)}" style="min-height:38px"><option value="">${key.includes('/')?'跟隨整類':'預設（第一個帳戶）'}</option>${names.map(n=>`<option ${AL.map[key]===n?'selected':''}>${esc(n)}</option>`).join('')}</select>`;
   const cats=Object.entries(st.cats.e);
   openSheet(`<div class="shd"><h3>薪資分配設定</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
-  <div class="card"><h2>分配比例　<span class="num ${Math.abs(sum-100)>.01?'exp':'inc'}">${Math.round(sum*10)/10}%</span></h2>
+  <div class="card"><h2>分配比例　<span id="al-sum" class="num ${Math.abs(sum-100)>.01?'exp':'inc'}">${Math.round(sum*10)/10}%</span></h2>
    ${AL.ratios.map((r,i)=>`<div class="lr" style="margin-bottom:8px"><input type="text" data-rn="${i}" value="${esc(r[0])}" aria-label="帳戶名稱" style="min-width:0"><input type="text" class="pct" style="width:64px!important" inputmode="decimal" data-rp="${i}" value="${r[1]}" aria-label="比例"><span class="muted">%</span><span class="mv"><button class="btn s" data-act="rmv" data-i="${i}" data-d="-1" aria-label="上移">↑</button><button class="btn s" data-act="rmv" data-i="${i}" data-d="1" aria-label="下移">↓</button></span><button class="ibtn" data-act="rdel" data-i="${i}" aria-label="刪除">${icon('x')}</button></div><label class="sm" style="display:flex;gap:8px;align-items:center;margin:-2px 0 12px 4px"><input type="checkbox" data-rc="${i}" ${r[2]?'checked':''}>結餘滾入下月</label>`).join('')}
    <button class="btn s" data-act="radd">新增分配帳戶</button>
    <p class="muted sm" style="margin:10px 0 0">修改後從「${mLabel(S.month)}」開始生效，之前月份維持當時的設定。勾選「結餘滾入下月」的專案，沒花完（或超支）的錢會帶到下個月。</p></div>
@@ -1246,7 +1246,7 @@ function drawAlloc(){
    <div class="lr" style="margin-top:8px"><span class="sm">都沒對到時算進</span><select id="al-def" style="min-height:38px">${names.map(n=>`<option ${(st.defaultBucket||'生活費帳戶')===n?'selected':''}>${esc(n)}</option>`).join('')}</select></div></div>
   <div class="card"><h2>支出分類要算進哪個帳戶</h2><p class="muted sm" style="margin:0 0 10px">先設整類，個別子分類不同時再單獨指定。</p>
    ${cats.map(([c,ss])=>`<details style="margin-bottom:8px"><summary>${esc(c)}</summary><div><div class="lr"><span class="sm">整類</span>${sel(c)}</div>${ss.map(s=>`<div class="lr"><span class="sm">${esc(s)}</span>${sel(c+'/'+s)}</div>`).join('')}</div></details>`).join('')}</div>
-  <button class="btn p" data-act="alsave">儲存設定</button>`);
+  <button class="btn p" data-act="alsave" style="position:sticky;bottom:0;z-index:2;box-shadow:0 -6px 12px var(--bg)">儲存設定</button>`);
 }
 function syncAL(){
   document.querySelectorAll('[data-rn]').forEach(i=>AL.ratios[+i.dataset.rn][0]=i.value.trim());
@@ -1488,6 +1488,7 @@ document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='q'){S.q=t.value;render();return}
   if(F&&t.id==='f-a'){F.a=t.value}
+  if(t.dataset&&t.dataset.rp!==undefined){const sm=[...document.querySelectorAll('[data-rp]')].reduce((x,i)=>x+(parseFloat(i.value)||0),0),el=document.getElementById('al-sum');if(el){el.textContent=Math.round(sm*10)/10+'%';el.className='num '+(Math.abs(sm-100)>.01?'exp':'inc')}}
 });
 document.addEventListener('change',e=>{
   const t=e.target;
@@ -1504,7 +1505,7 @@ document.addEventListener('change',e=>{
   if(t.id==='baseov'){const v=t.value.replace(/,/g,'').trim();if(v===''||!isFinite(+v))delete S.settings.baseOverride[S.month];else S.settings.baseOverride[S.month]=+v;commitSettings();render()}
   if(t.dataset.bill!==undefined){const m=S.month,b=S.settings.bills[m]||(S.settings.bills[m]={}),o=b[t.dataset.bill]||(b[t.dataset.bill]={});const v=t.value.replace(/,/g,'').trim();o.amt=v===''?null:+v;commitSettings();render()}
   if(t.dataset.paid!==undefined){const m=S.month,b=S.settings.bills[m]||(S.settings.bills[m]={}),o=b[t.dataset.paid]||(b[t.dataset.paid]={});o.paid=t.checked;commitSettings();render()}
-  if(t.dataset.map!==undefined||t.dataset.rn!==undefined||t.dataset.rp!==undefined){if(AL){syncAL();if(t.dataset.rp!==undefined||t.dataset.rn!==undefined)drawAlloc()}}
+  if(t.dataset.map!==undefined||t.dataset.rn!==undefined||t.dataset.rp!==undefined){if(AL){syncAL();if(t.dataset.rn!==undefined){const sh=$('.sheet'),y=sh?sh.scrollTop:0;drawAlloc();const s2=$('.sheet');if(s2)s2.scrollTop=y}}}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#sheetHost').innerHTML)closeSheet()});
 addEventListener('hashchange',()=>{const v=location.hash.slice(1);if((VIEWS[v]||TABOF[v])&&v!==S.view){S.view=v;render()}});
