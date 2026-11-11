@@ -1314,6 +1314,12 @@ function openRecEdit(id){
   <div class="sm muted">已經自動記好的紀錄不會被改，修改只對還沒入帳的月份有效。</div>
   <button class="btn p" data-act="resave" data-id="${esc(id)}">儲存</button>`);
 }
+{const _openSettings=openSettings;
+  openSettings=function(){
+    const sh=document.querySelector('.sheet'),y=sh?sh.scrollTop:0,open=[...document.querySelectorAll('.sheet details')].map(d=>d.open),had=!!document.querySelector('.sheet details');
+    _openSettings();
+    if(had){document.querySelectorAll('.sheet details').forEach((d,i)=>{if(open[i]!==undefined)d.open=open[i]});const s2=document.querySelector('.sheet');if(s2)s2.scrollTop=y}
+  };}
 function download(name,data){
   const u=URL.createObjectURL(new Blob([data],{type:'text/plain;charset=utf-8'})),a=document.createElement('a');
   a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),2000);toast('已下載 '+name)
