@@ -1495,17 +1495,26 @@ document.addEventListener('pointerdown',e=>{
   if(!row)return;
   const i0=sibs.indexOf(row);if(i0<0||sibs.length<2)return;
   e.preventDefault();try{h.setPointerCapture(e.pointerId)}catch(_){}
-  const y0=e.clientY,mids=sibs.map(c=>{const r=c.getBoundingClientRect();return r.top+r.height/2});
-  row.classList.add('dragging');
-  const target=y=>{let t=i0;const c=mids[i0]+(y-y0);let best=1e9;mids.forEach((m,k)=>{const d=Math.abs(m-c);if(d<best){best=d;t=k}});return t};
-  const mv=ev=>{row.style.transform='translateY('+(ev.clientY-y0)+'px)'};
+  const sc=h.closest('.sheet')||document.scrollingElement,isW=!h.closest('.sheet'),sy=()=>isW?window.scrollY:sc.scrollTop;
+  const y0=e.clientY,s0=sy(),mids=sibs.map(c=>{const r=c.getBoundingClientRect();return r.top+r.height/2});
+  let cy=y0,raf=0;row.classList.add('dragging');
+  const dy=()=>(cy-y0)+(sy()-s0);
+  const target=()=>{let t=i0,best=1e9;const c=mids[i0]+dy();mids.forEach((m,k)=>{const d=Math.abs(m-c);if(d<best){best=d;t=k}});return t};
+  const paint=()=>{row.style.transform='translateY('+dy()+'px)'};
+  const tick=()=>{
+    const r=isW?{top:0,bottom:innerHeight-90}:sc.getBoundingClientRect(),z=110;let v=0;
+    if(cy<r.top+z)v=-(Math.ceil((r.top+z-cy)/2.5)+4);else if(cy>r.bottom-z)v=Math.ceil((cy-(r.bottom-z))/2.5)+4;
+    if(v){v=Math.max(-40,Math.min(40,v));if(isW)window.scrollBy(0,v);else sc.scrollTop+=v;paint()}
+    raf=requestAnimationFrame(tick)};
+  raf=requestAnimationFrame(tick);
+  const mv=ev=>{cy=ev.clientY;paint()};
+  const end=()=>{cancelAnimationFrame(raf);h.removeEventListener('pointermove',mv);h.removeEventListener('pointerup',up);h.removeEventListener('pointercancel',cn)};
   const up=ev=>{
-    h.removeEventListener('pointermove',mv);h.removeEventListener('pointerup',up);h.removeEventListener('pointercancel',cn);
-    const t=target(ev.clientY);row.classList.remove('dragging');row.style.transform='';
+    end();cy=ev.clientY;const t=target();row.classList.remove('dragging');row.style.transform='';
     const dir=t>i0?1:-1,n=Math.abs(t-i0),f=ACTS[act];let cur=i0;
     for(let k=0;k<n;k++){const ds=Object.assign({},h.dataset,{d:String(dir),i:String(cur)});f({dataset:ds});cur+=dir}
   };
-  const cn=()=>{h.removeEventListener('pointermove',mv);h.removeEventListener('pointerup',up);h.removeEventListener('pointercancel',cn);row.classList.remove('dragging');row.style.transform=''};
+  const cn=()=>{end();row.classList.remove('dragging');row.style.transform=''};
   h.addEventListener('pointermove',mv);h.addEventListener('pointerup',up);h.addEventListener('pointercancel',cn);
 });
 let BGD=false;['pointerdown','mousedown','touchstart'].forEach(ev=>document.addEventListener(ev,e=>{BGD=!!(e.target.classList&&e.target.classList.contains('sheetbg'))},true));
