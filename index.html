@@ -165,6 +165,8 @@ details>div{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
 .lr>span:first-child{flex:1 1 38%;overflow-wrap:anywhere}
 textarea{width:100%;border:0;border-radius:14px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);padding:10px 12px;font:inherit;color:inherit;resize:none;min-height:46px}
 .dh{touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none;min-width:44px!important}.dragging{position:relative;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:.95}
+.cic{width:34px;height:34px;border-radius:12px;display:grid;place-items:center;flex:none;background:color-mix(in srgb,hsl(var(--h) 55% 50%) 16%,transparent);color:hsl(var(--h) 50% var(--dot-l))}.cic .ic{width:18px;height:18px}
+.hero{padding:20px 18px}.hero .big-total{text-align:left;font-family:var(--serif);font-weight:600;font-size:44px;margin:4px 0 14px}.hero .split{display:flex;gap:3px;height:8px;border-radius:99px;overflow:hidden;background:var(--line)}.hero .split i{background:var(--inc)}.hero .split b{background:var(--exp)}.hero .hl{display:flex;justify-content:space-between;margin-top:10px;font-size:13px;color:var(--muted)}
 .mv{display:flex;gap:4px;flex:none}.mv .btn{min-width:38px;padding:4px 8px;min-height:34px}
 .chat{display:flex;flex-direction:column;gap:10px;max-height:46vh;overflow:auto;padding:2px}
 .bub{padding:9px 13px;border-radius:16px;max-width:88%;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -187,11 +189,9 @@ body{background-image:radial-gradient(700px 400px at 90% -10%,color-mix(in srgb,
 .seg{background:color-mix(in srgb,var(--surface) 80%,transparent);border:1px solid var(--line)}
 .seg button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent);box-shadow:0 0 0 1px var(--accent),0 0 14px var(--glow)}
 .chip[aria-pressed="true"]{background:var(--accent);color:var(--on-accent);box-shadow:0 0 12px var(--glow)}
-.bar{background:var(--line)}.bar i{background:linear-gradient(90deg,var(--accent),var(--accent2));box-shadow:0 0 8px var(--glow)}
-.bar.over i{background:var(--exp);box-shadow:0 0 8px var(--exp)}
-.big-total{text-shadow:0 0 26px color-mix(in srgb,var(--inc) 50%,transparent)}
-.subtabs button[aria-current="true"]{text-shadow:0 0 12px var(--glow)}
-.dot{background:hsl(var(--h) 70% var(--dot-l));box-shadow:0 0 8px hsl(var(--h) 70% var(--dot-l)/.6)}
+.bar{background:var(--line)}.bar i{background:linear-gradient(90deg,var(--accent),var(--accent2));}
+.bar.over i{background:var(--exp);}
+.dot{background:hsl(var(--h) 55% var(--dot-l))}
 .lr>.badge:first-child,.badge{flex:none;width:44px;height:44px;background:hsl(var(--h) 60% calc(var(--dot-l) - 6%))}
 .aic{background:var(--accent-soft);color:var(--accent)}
 .sheetbg{backdrop-filter:blur(3px)}
@@ -387,9 +387,9 @@ function showLogin(msg){
   $('#app').hidden=true;$('#tabs').hidden=true;$('#fab').hidden=true;
   const el=$('#login');el.hidden=false;
   el.innerHTML=`<div class="card" style="max-width:420px;margin:12vh auto 0;display:flex;flex-direction:column;gap:12px">
-   <h2 style="font-size:24px;margin:0;font-family:var(--serif)">金流手帳</h2><p class="muted" style="margin:0">登入後資料會存在雲端，換手機或電腦都在。</p>
+   <h2 style="font-size:24px;margin:0;font-family:var(--serif)">金流手帳</h2><p style="margin:0;font-family:var(--serif);font-size:17px">把每一筆錢的去向，好好記下來。</p><p class="muted sm" style="margin:0">登入後資料會安全存在雲端，手機、電腦都能同步。</p>
    <button class="btn p" id="gbtn">用 Google 登入</button>
-   <div class="muted sm" style="text-align:center">或用 Email 收登入連結</div>
+   <div class="muted sm" style="text-align:center">或輸入 Email，我們寄一條登入連結給你，不用記密碼</div>
    <input type="text" id="em" inputmode="email" placeholder="you@example.com" autocomplete="email">
    <button class="btn" id="ebtn">寄登入連結</button>
    <div class="sm" id="lmsg" role="status">${esc(msg||'')}</div></div>`;
@@ -446,6 +446,9 @@ function toast(t){const el=document.createElement('div');el.className='toast';el
 const IC={plan:'<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',list:'<path d="M4 6h16M4 12h16M4 18h10"/>',cal:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   stats:'<path d="M5 20V10M12 20V4M19 20v-7"/>',alloc:'<path d="M12 3v9h9"/><path d="M20.5 15A9 9 0 1 1 9 3.6"/>',acct:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/>',
   prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8L21.5 18.5l-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/>',gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',trend:'<path d="M3 17l6-6 4 4 7-8"/><path d="M15 7h5v5"/>',eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',plus:'<path d="M12 5v14M5 12h14"/>'};
+Object.assign(IC,{food:'<path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10"/><path d="M17 3c-2 2-3 4.5-3 7h3v11"/>',bus:'<rect x="4" y="4" width="16" height="13" rx="3"/><path d="M4 11h16M8 20v-3M16 20v-3"/><circle cx="8.5" cy="14" r=".6"/><circle cx="15.5" cy="14" r=".6"/>',home:'<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10M10 20v-6h4v6"/>',bag:'<path d="M5 8h14l-1 12H6z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/>',heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',book:'<path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h10"/>',star:'<path d="M12 4l2.3 4.9 5.2.7-3.8 3.7.9 5.2L12 16l-4.6 2.5.9-5.2L4.5 9.6l5.2-.7z"/>',user:'<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-6 7-6s6 2 7 6"/>',users:'<circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2.4"/><path d="M3 19c.8-3.4 3.2-5 6-5s5.2 1.6 6 5M16 14.5c2.4 0 4.2 1.3 5 4.5"/>',coin:'<circle cx="12" cy="12" r="8"/><path d="M12 7.5v9M9.5 10h4.2a1.6 1.6 0 0 1 0 3.2h-3.4a1.6 1.6 0 0 0 0 3.2H14.5"/>',dots:'<circle cx="6" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="18" cy="12" r="1"/>',swap:'<path d="M4 8h14l-3-3M20 16H6l3 3"/>',tag:'<path d="M4 12V5h7l9 9-7 7z"/><circle cx="8.5" cy="8.5" r="1"/>'});
+const CIK=[[/飲食|餐|食/,'food'],[/交通|車|運/,'bus'],[/家居|房|住/,'home'],[/購物|買/,'bag'],[/醫|健康|保健/,'heart'],[/學習|書|課/,'book'],[/娛樂|玩|旅|遊/,'star'],[/個人|保險|稅/,'user'],[/家庭|贈|禮|紅包/,'users'],[/貸款|手續|薪|收入|獎金|利息|投資|代墊/,'coin'],[/其他/,'dots']];
+const cic=(c,t)=>{const n=t==='x'?'swap':(CIK.find(([r])=>r.test(String(c)))||[0,'tag'])[1];return `<span class="cic" style="--h:${t==='x'?210:hue(c)}">${icon(n)}</span>`};
 const icon=n=>`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[n]}</svg>`;
 const accNames=()=>S.settings.accounts.map(a=>a.n);
 const activeNames=()=>S.settings.accounts.filter(a=>!a.h).map(a=>a.n);
@@ -465,7 +468,7 @@ function items(m){
   return out;
 }
 function rowHtml(it){
-  if(it.kind==='x')return `<button class="row" data-act="edit" data-id="${esc(it.id)}"><span class="dot" style="--h:210"></span><span class="rt"><b>轉帳</b><small>${esc(it.from)} → ${esc(it.to)}${it.n?' · '+esc(it.n):''}</small></span><span class="amt">${fmt(it.a)}</span></button>`;
+  if(it.kind==='x')return `<button class="row" data-act="edit" data-id="${esc(it.id)}">${cic("","x")}<span class="rt"><b>轉帳</b><small>${esc(it.from)} → ${esc(it.to)}${it.n?' · '+esc(it.n):''}</small></span><span class="amt">${fmt(it.a)}</span></button>`;
   const r=it.r;let title,sub,cls='',sign='';
   if(isExp(r)){title=r.c+(r.s?' · '+r.s:'');cls='exp';sign='−'}
   else if(isInc(r)){title=r.c+(r.s?' · '+r.s:'');cls='inc';sign='+'}
@@ -473,7 +476,7 @@ function rowHtml(it){
   else if(r.t==='adj'){title='餘額調整';sign=r.a<0?'−':'+'}
   else {title='應收款項'+(r.s?' · '+r.s:'');sign=r.a<0?'−':'+'}
   sub=[r.ac,r.n,r.p].filter(Boolean).join(' · ');
-  return `<button class="row" data-act="edit" data-id="${esc(r.id)}"><span class="dot" style="--h:${hue(r.c||r.t)}"></span><span class="rt"><b>${esc(title)}</b><small>${esc(sub)}</small></span><span class="amt ${cls}">${sign}${fmt(Math.abs(r.a))}</span></button>`;
+  return `<button class="row" data-act="edit" data-id="${esc(r.id)}">${cic(r.c||r.t)}<span class="rt"><b>${esc(title)}</b><small>${esc(sub)}</small></span><span class="amt ${cls}">${sign}${fmt(Math.abs(r.a))}</span></button>`;
 }
 function listBlock(its){
   const days=[];const map={};
@@ -568,7 +571,7 @@ function vStats(){
     const by={};for(const r of rs){const o=by[r.c]||(by[r.c]={v:0,sub:{}});const v=r.a*(ty==='e'?-1:1);o.v+=v;o.sub[r.s||'未分類']=(o.sub[r.s||'未分類']||0)+v}
     const list=Object.entries(by).sort((a,b)=>b[1].v-a[1].v),bud=st.budgets||{};
     const rowsH=list.map(([c,o])=>{const pc=total>0?o.v/total*100:0,b=ty==='e'?+bud[c]||0:0,open=S.openCat===c;
-      return `<div><button class="row" style="padding:10px 0;border:0;background:none" data-act="cat" data-c="${esc(c)}" aria-expanded="${open}"><span class="dot" style="--h:${hue(c)}"></span><span class="rt"><b>${esc(c)}</b><small class="num">${pc.toFixed(1)}%${b?' · 預算 '+fmt(b)+(o.v>b?' · 超出 '+fmt(o.v-b):' · 剩 '+fmt(b-o.v)):''}</small></span><span class="amt">${fmt(o.v)}</span></button>
+      return `<div><button class="row" style="padding:10px 0;border:0;background:none" data-act="cat" data-c="${esc(c)}" aria-expanded="${open}">${cic(c)}<span class="rt"><b>${esc(c)}</b><small class="num">${pc.toFixed(1)}%${b?' · 預算 '+fmt(b)+(o.v>b?' · 超出 '+fmt(o.v-b):' · 剩 '+fmt(b-o.v)):''}</small></span><span class="amt">${fmt(o.v)}</span></button>
       <div class="bar ${b&&o.v>b?'over':''}"><i style="width:${Math.min(100,b?o.v/b*100:pc)}%"></i></div>
       ${open?`<div style="padding:6px 0 4px 22px">${Object.entries(o.sub).sort((a,b)=>b[1]-a[1]).map(([s,v])=>`<div class="lr sm" style="padding:3px 0"><span>${esc(s)}</span><span class="num">${fmt(v)}</span></div>`).join('')}</div>`:''}</div>`}).join('<div style="height:10px"></div>');
     body=`<div class="seg" role="group" aria-label="類型"><button aria-pressed="${ty==='e'}" data-act="stat" data-v="e">支出</button><button aria-pressed="${ty==='i'}" data-act="stat" data-v="i">收入</button></div><div class="card"><h2>${ty==='e'?'支出':'收入'}分類　<span class="num">${fmt(total)}</span></h2>${list.length?rowsH:'<div class="muted" style="text-align:center;padding:12px">這個月還沒有紀錄</div>'}</div>`;
@@ -634,8 +637,9 @@ function vAcct(){
     <div class="lr" style="margin-top:10px"><span class="muted sm">尚未繳款合計</span><span class="num exp">${fmt(unpaid)}</span></div></div>`
     :`<div class="card muted sm">在帳戶裡把信用卡的類型設成「信用卡」，這裡就會出現每月帳單核對。</div>`;
   return `<div style="display:flex;justify-content:space-between;align-items:center"><button class="ibtn" data-act="hide" aria-label="${S.hide?'顯示金額':'隱藏金額'}" aria-pressed="${S.hide}">${icon('eye')}</button><b style="font-family:var(--serif);letter-spacing:.06em">帳戶總覽</b><button class="ibtn" data-act="acc" data-n="" aria-label="新增帳戶">${icon('plus')}</button></div>
-  <div style="text-align:center"><span class="lbl">總額 TWD</span><div class="big-total num${hide} ${total<0?'neg':''}">${total<0?'−':''}${fmt(Math.abs(total))}</div>
-  <div class="sm muted" style="margin-top:4px">總資產 <span class="inc${hide}">${fmt(asset)}</span>　總負債 <span class="exp${hide}">${fmt(Math.abs(debt))}</span></div></div>
+  <div class="card hero"><span class="lbl">淨資產 TWD</span><div class="big-total num${hide} ${total<0?'neg':''}">${total<0?'−':''}${fmt(Math.abs(total))}</div>
+  <div class="split" aria-hidden="true"><i style="flex:${Math.max(asset,0)||0.0001}"></i><b style="flex:${Math.abs(debt)||0.0001}"></b></div>
+  <div class="hl"><span>資產 <b class="inc${hide}" style="font-weight:500">${fmt(asset)}</b></span><span>負債 <b class="exp${hide}" style="font-weight:500">${fmt(Math.abs(debt))}</b></span></div></div>
   <div class="card">${chart||'<div class="muted sm" style="text-align:center">金額已隱藏</div>'}</div>
   ${(()=>{const B=cardBurden();return `<div class="card"><h2>信用卡要還多少</h2>
     <div class="lr" style="padding:4px 0"><span>已出帳、還沒繳</span><span class="num exp${hide}">$${fmt(B.billed)}</span></div>
