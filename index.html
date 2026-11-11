@@ -344,7 +344,7 @@ const groupList=()=>{const l=[...(S.settings.groups||[])];S.settings.accounts.fo
 /* ---------- state ---------- */
 const nowDate=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 const S={settings:DEFAULTS(),months:{},month:monthOf(nowDate()),view:'acct',day:null,ready:false,mode:'',stat:'e',openCat:'',srange:90,rep:'ov',hide:false,shut:(()=>{try{const j=JSON.parse(localStorage.getItem('ledger_shut')||'null');if(j&&typeof j==='object')return j}catch(e){}return{'不再使用':true}})(),scope:'m',cty:'e',q:''};
-const VIEWS={acct:['帳戶','acct'],cal:['月曆','cal'],stats:['報表','stats'],plan:['計畫','plan']};
+const VIEWS={acct:['帳戶','acct'],stats:['報表','stats'],cal:['月曆','cal'],plan:['計畫','plan']};
 const TABOF={list:'cal',stock:'acct',alloc:'acct'};
 let F=null;
 
