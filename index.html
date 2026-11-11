@@ -339,8 +339,9 @@ const groupList=()=>{const l=[...(S.settings.groups||[])];S.settings.accounts.fo
 
 /* ---------- state ---------- */
 const nowDate=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
-const S={settings:DEFAULTS(),months:{},month:monthOf(nowDate()),view:'acct',day:null,ready:false,mode:'',stat:'e',openCat:'',srange:90,rep:'ov',hide:false,shut:{},scope:'m',cty:'e',q:''};
-const VIEWS={acct:['帳戶','acct'],list:['明細','list'],cal:['月曆','cal'],stats:['報表','stats'],alloc:['分配','alloc'],stock:['股票','trend']};
+const S={settings:DEFAULTS(),months:{},month:monthOf(nowDate()),view:'acct',day:null,ready:false,mode:'',stat:'e',openCat:'',srange:90,rep:'ov',hide:false,shut:(()=>{try{const j=JSON.parse(localStorage.getItem('ledger_shut')||'null');if(j&&typeof j==='object')return j}catch(e){}return{'不再使用':true}})(),scope:'m',cty:'e',q:''};
+const VIEWS={acct:['帳戶','acct'],cal:['月曆','cal'],stats:['報表','stats'],plan:['計畫','plan']};
+const TABOF={list:'cal',stock:'acct',alloc:'acct'};
 let F=null;
 
 /* ---------- storage ---------- */
@@ -437,7 +438,7 @@ const mLabel=m=>m.slice(0,4)+' 年 '+(+m.slice(5))+' 月';
 const recs=m=>S.months[m]||[];
 const allRecs=()=>Object.values(S.months).flat();
 function toast(t){const el=document.createElement('div');el.className='toast';el.setAttribute('role','status');el.textContent=t;$('#toastHost').appendChild(el);setTimeout(()=>el.remove(),2600)}
-const IC={list:'<path d="M4 6h16M4 12h16M4 18h10"/>',cal:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+const IC={plan:'<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',list:'<path d="M4 6h16M4 12h16M4 18h10"/>',cal:'<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   stats:'<path d="M5 20V10M12 20V4M19 20v-7"/>',alloc:'<path d="M12 3v9h9"/><path d="M20.5 15A9 9 0 1 1 9 3.6"/>',acct:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/>',
   prev:'<path d="M15 5l-7 7 7 7"/>',next:'<path d="M9 5l7 7-7 7"/>',spark:'<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.7 1.8L21.5 18.5l-1.8.7L19 21l-.7-1.8-1.8-.7 1.8-.7z"/>',gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/>',x:'<path d="M6 6l12 12M18 6L6 18"/>',trend:'<path d="M3 17l6-6 4 4 7-8"/><path d="M15 7h5v5"/>',eye:'<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/>',plus:'<path d="M12 5v14M5 12h14"/>'};
 const icon=n=>`<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${IC[n]}</svg>`;
@@ -505,6 +506,10 @@ function vList(){
     (its.length?listBlock(its):`<div class="card muted" style="text-align:center">${S.q?'沒有符合的紀錄':'這個月還沒有紀錄'}</div>`));
 }
 function vCal(){
+  const seg=`<div class="seg" role="group" aria-label="檢視">${[['cal','月曆'],['list','明細列表']].map(([k,n])=>`<button aria-pressed="${(S.calMode||'cal')===k}" data-act="calmode" data-v="${k}">${n}</button>`).join('')}</div>`;
+  return seg+((S.calMode||'cal')==='list'?vList():vCalGrid());
+}
+function vCalGrid(){
   const m=S.month,y=+m.slice(0,4),mo=+m.slice(5)-1,dim=new Date(y,mo+1,0).getDate(),first=new Date(y,mo,1).getDay();
   const per={};for(const r of recs(m)){const o=per[r.d]||(per[r.d]={e:0,i:0});if(isExp(r))o.e+=-r.a;else if(isInc(r))o.i+=r.a}
   const today=nowDate();let cells='';
@@ -631,12 +636,62 @@ function vAcct(){
     <div class="lr" style="padding:4px 0"><span>已出帳、還沒繳</span><span class="num exp${hide}">$${fmt(B.billed)}</span></div>
     <div class="lr" style="padding:4px 0"><span>本期已刷（還沒出帳）</span><span class="num exp${hide}">$${fmt(B.open)}</span></div>
     <div class="lr" style="padding:8px 0 0;border-top:1px solid var(--line);margin-top:4px"><b style="font-weight:500">接下來要準備</b><b class="num exp${hide}" style="font-size:20px">$${fmt(B.billed+B.open)}</b></div><button class="btn s" style="margin-top:10px;width:100%" data-act="cdetail">看細項</button></div>`})()}
+  ${(()=>{const hs=holdingsFrom(st.trades,st.prices),mv=hs.reduce((t,x)=>t+x.mv,0),cost=hs.reduce((t,x)=>t+x.cost,0),pl=mv-cost;return `<div class="card"><div class="lr"><h2 style="margin:0">股票</h2><button class="btn s" style="flex:none" data-act="goto" data-v="stock">查看股票</button></div>${hs.length?`<div class="lr" style="margin-top:8px"><span class="sm muted">市值</span><b class="num${hide}">$${fmt(mv)}</b></div><div class="lr sm" style="margin-top:2px"><span class="muted">未實現損益</span><span class="num ${pl<0?'exp':'inc'}${hide}">${pl<0?'−':'+'}$${fmt(Math.abs(pl))}</span></div>`:'<div class="sm muted" style="margin-top:6px">還沒有持股，進去新增交易。</div>'}</div>`})()}
   <div><div style="display:flex;justify-content:flex-end;margin-bottom:6px"><button class="btn s" data-act="sortacc">${S.sortAcc?'完成排序':'調整順序'}</button></div>${gH||'<div class="card muted">還沒有帳戶</div>'}</div>
   <p class="muted sm">餘額＝期初餘額＋所有紀錄加總。與實際不符時，點進帳戶輸入「目前實際餘額」就會自動校正。</p>`;
 }
 const todayStr=()=>nowDate();
 function snapNow(){const st=S.settings,hs=holdingsFrom(st.trades,st.prices);st.snaps=st.snaps||{};st.snaps[todayStr()]=Math.round(hs.reduce((s,x)=>s+x.mv,0))}
 const PHS=[215,175,330,35,275,8,85,190];
+
+/* ---------- 計畫（存錢目標） ---------- */
+const GOAL_TYPES=['緊急備用金','旅遊','大額購物','其他'];
+function goalCur(g,bal){
+  if(g.acc){const a=S.settings.accounts.find(x=>x.n===g.acc);return a?Math.max(0,(a.init||0)+(bal[g.acc]||0)):0}
+  return +g.cur||0;
+}
+function monthsLeft(due){if(!due)return null;const t=nowDate(),a=+t.slice(0,4)*12+ +t.slice(5,7),b=+due.slice(0,4)*12+ +due.slice(5,7);return b-a}
+function goalCard(g,i,n,bal,hide){
+  const cur=goalCur(g,bal),tg=+g.target||0,pct=tg?Math.min(999,Math.round(cur/tg*1000)/10):0,left=Math.max(0,tg-cur),ml=monthsLeft(g.due),reached=tg>0&&cur>=tg;
+  const need=!reached&&ml!==null?(ml>0?`距離 ${g.due.slice(0,4)}/${g.due.slice(5)} 還有 ${ml} 個月，每月存 <b class="num">$${fmt(Math.ceil(left/ml))}</b>`:`<span class="exp">已超過目標日期，還差 $${fmt(left)}</span>`):'';
+  return `<div class="card"><div class="lr"><b>${esc(g.name)} <span class="tag2">${esc(g.type||'其他')}</span></b><span class="mv" style="flex:none"><button class="btn s" data-act="gmv" data-id="${esc(g.id)}" data-d="-1" ${i===0?'disabled':''} aria-label="上移">↑</button><button class="btn s" data-act="gmv" data-id="${esc(g.id)}" data-d="1" ${i===n-1?'disabled':''} aria-label="下移">↓</button></span></div>
+  <div class="lr" style="margin-top:8px;align-items:baseline"><span class="num${hide}" style="font-size:24px;font-weight:500">$${fmt(cur)}</span><span class="sm muted">目標 <span class="num${hide}">$${fmt(tg)}</span></span></div>
+  <div class="bar" style="margin:8px 0"><i style="width:${Math.min(100,pct)}%"></i></div>
+  <div class="lr sm"><span class="${reached?'inc':''}"><b>${pct}%</b>${reached?'　已達標 🎉':'　還差 $'+fmt(left)}</span><span class="muted">${g.acc?'連動：'+esc(g.acc):'手動累計'}</span></div>
+  ${need?`<div class="sm muted" style="margin-top:6px">${need}</div>`:''}${g.note?`<div class="sm muted" style="margin-top:4px">${esc(g.note)}</div>`:''}
+  <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap"><label class="sm" style="display:flex;gap:8px;align-items:center;flex:1;min-width:120px"><input type="checkbox" data-act="gdone" data-id="${esc(g.id)}" ${g.done?'checked':''} style="width:20px;height:20px">${reached&&!g.done?'已達標，勾選完成':'標記完成'}</label>
+  ${g.acc?'':`<button class="btn s" data-act="gdep" data-id="${esc(g.id)}">＋存入</button>`}<button class="btn s" data-act="goalform" data-id="${esc(g.id)}">編輯</button></div></div>`;
+}
+function vPlan(){
+  const st=S.settings,gs=st.goals||[],bal=sumByAccount(S.months),hide=S.hide?' blur':'';
+  const act=gs.filter(g=>!g.done),done=gs.filter(g=>g.done);
+  const tT=act.reduce((t,g)=>t+(+g.target||0),0),tC=act.reduce((t,g)=>t+Math.min(goalCur(g,bal),+g.target||0),0);
+  const head=`<div class="card"><div class="lr"><h2 style="margin:0">存錢計畫</h2><button class="btn s" style="flex:none" data-act="goalform" data-id="">＋ 新增計畫</button></div>
+   ${act.length?`<div class="sm muted" style="margin-top:8px">進行中 ${act.length} 項，合計目標 <span class="num${hide}">$${fmt(tT)}</span>，已存 ${tT?Math.round(tC/tT*100):0}%</div>`:'<div class="sm muted" style="margin-top:8px">還沒有計畫。可以記緊急備用金、旅遊基金、想買的東西，系統會算出進度和每月該存多少。</div>'}</div>`;
+  return head+act.map(g=>goalCard(g,gs.indexOf(g),gs.length,bal,hide)).join('')+(done.length?`<details><summary>已完成（${done.length}）</summary><div>${done.map(g=>goalCard(g,gs.indexOf(g),gs.length,bal,hide)).join('')}</div></details>`:'');
+}
+let GF=null;
+function openGoalForm(id,preset){
+  const st=S.settings,g=id&&(st.goals||[]).find(x=>x.id===id);
+  GF=g?{...g}:{id:'',name:(preset&&preset.name)||'',type:(preset&&preset.type)||'其他',target:'',due:'',acc:'',cur:'',note:''};
+  drawGoalForm();
+}
+function drawGoalForm(){
+  const st=S.settings,G=GF;
+  openSheet(`<div class="shd"><h3>${G.id?'編輯':'新增'}計畫</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
+  ${G.id?'':`<div class="sm muted">快速開始</div><div style="display:flex;gap:8px;flex-wrap:wrap">${[['緊急備用金','緊急備用金'],['旅遊基金','旅遊'],['想買的東西','大額購物']].map(([n,t])=>`<button class="btn s" data-act="gpreset" data-n="${n}" data-t="${t}">${n}</button>`).join('')}</div>`}
+  <label class="field"><span>名稱</span><input type="text" id="g-n" value="${esc(G.name)}" placeholder="例如：2027 上海旅遊"></label>
+  <div class="grid2"><label class="field"><span>類型</span><select id="g-t">${GOAL_TYPES.map(t=>`<option ${t===G.type?'selected':''}>${t}</option>`).join('')}</select></label>
+  <label class="field"><span>目標金額</span><input type="text" id="g-a" inputmode="numeric" value="${esc(G.target)}" placeholder="420000"></label></div>
+  <label class="field"><span>目標月份（選填，會算每月該存多少）</span><input type="month" id="g-d" value="${esc(G.due||'')}"></label>
+  <label class="field"><span>目前金額從哪來</span><select id="g-ac"><option value="">手動累計（用「存入」記錄）</option>${st.accounts.filter(a=>!a.h||a.n===G.acc).map(a=>`<option ${a.n===G.acc?'selected':''}>${esc(a.n)}</option>`).join('')}</select></label>
+  <div class="sm muted" style="margin-top:-4px">選一個帳戶，進度就會自動等於那個帳戶目前的餘額，例如台新銀行。</div>
+  <label class="field"><span>手動累計金額（只在「手動累計」時使用）</span><input type="text" id="g-c" inputmode="numeric" value="${esc(G.cur)}" placeholder="0"></label>
+  <label class="field"><span>備註（選填）</span><input type="text" id="g-no" value="${esc(G.note||'')}"></label>
+  <div style="display:flex;gap:8px"><button class="btn p" style="flex:1" data-act="gsave">儲存</button>${G.id?'<button class="btn d" data-act="gdel">刪除</button>':''}</div>`);
+}
+function syncGF(){const g=i=>{const e=document.getElementById(i);return e?e.value:undefined};
+  const m={name:'g-n',type:'g-t',target:'g-a',due:'g-d',acc:'g-ac',cur:'g-c',note:'g-no'};for(const k in m){const v=g(m[k]);if(v!==undefined)GF[k]=v}}
 function vStock(){
   const st=S.settings,hs=holdingsFrom(st.trades,st.prices),mv=hs.reduce((s,x)=>s+x.mv,0),cost=hs.reduce((s,x)=>s+x.cost,0),pl=mv-cost,hide=S.hide?' blur':'';
   const btns=`<div style="display:flex;gap:8px"><button class="btn p" style="flex:1" data-act="trade">新增交易</button><button class="btn" style="flex:1" data-act="sync" ${hs.length?'':'disabled'}>同步股價</button><button class="btn" style="flex:1" data-act="prices" ${hs.length?'':'disabled'}>手動輸入</button></div><div class="sm muted" style="text-align:center" role="status">${esc(S.syncMsg||(hs.length?'價格為證交所／櫃買中心收盤價，非即時報價':''))}</div>`;
@@ -669,12 +724,13 @@ async function syncPrices(manual){
   const jobs=[
     fetchJSON('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL').then(a=>a.forEach(r=>{const p=num(r.ClosingPrice);if(p)px[r.Code]={p,at:r.Date}})).catch(()=>{}),
     fetchJSON('https://www.tpex.org.tw/openapi/v1/tpex_mainboard_daily_close_quotes').then(a=>a.forEach(r=>{const p=num(r.Close);if(p&&!px[r.SecuritiesCompanyCode])px[r.SecuritiesCompanyCode]={p}})).catch(()=>{})];
-  await Promise.all(jobs);
+  try{const r=await fetch('/api/quote?codes='+encodeURIComponent(hs.map(h=>h.code).join(',')));if(r.ok){const j=await r.json();for(const c in j.px)px[c]={p:j.px[c].p}}else S.syncErr='伺服器回應 '+r.status}catch(e){S.syncErr='連不到伺服器'}
+  if(!hs.every(h=>px[h.code]))await Promise.all(jobs);
   let n=0;const miss=[];
   hs.forEach(h=>{if(px[h.code]){st.prices[h.code]={p:px[h.code].p,at:todayStr(),auto:true};n++}else miss.push(h.code)});
   syncing=false;
   if(n){snapNow();commitSettings();S.syncMsg='已同步收盤價 · '+new Date().toTimeString().slice(0,5)+(miss.length?'；找不到：'+miss.join('、'):'')}
-  else S.syncMsg=manual?'同步失敗，可能是網路或資料來源暫時不能用，請用「更新股價」手動輸入':'';
+  else S.syncMsg=manual?'同步失敗'+(S.syncErr?'（'+S.syncErr+'）':'')+'，可能是資料來源暫時不能用，請用「手動輸入」':'';
   S.lastSync=Date.now();render();
 }
 function assistIssues(){
@@ -1038,10 +1094,10 @@ function openPrices(){
 function render(){
   const v=S.view;
   $('#hdr').innerHTML=hdrHtml();
-  const fn={list:vList,cal:vCal,stats:vStats,alloc:vAlloc,acct:vAcct,stock:vStock}[v]||vList;
+  const fn={list:vList,cal:vCal,stats:vStats,alloc:vAlloc,acct:vAcct,stock:vStock,plan:vPlan}[v]||vCal;
   const keep=document.activeElement&&document.activeElement.id==='q';
-  $('#view').innerHTML=bannerHtml()+fn();
-  $('#tabs').innerHTML=Object.entries(VIEWS).map(([k,[n,i]])=>`<button data-act="goto" data-v="${k}" ${k===v?'aria-current="page"':''}>${icon(i)}<span>${n}</span></button>`).join('');
+  $('#view').innerHTML=bannerHtml()+((v==='stock'||v==='alloc')?`<button class="btn s" data-act="goto" data-v="acct" style="align-self:flex-start">← 返回帳戶</button>`:'')+fn();
+  $('#tabs').innerHTML=Object.entries(VIEWS).map(([k,[n,i]])=>`<button data-act="goto" data-v="${k}" ${k===(TABOF[v]||v)?'aria-current="page"':''}>${icon(i)}<span>${n}</span></button>`).join('');
   if(keep){const q=$('#q');if(q){q.focus();q.setSelectionRange(q.value.length,q.value.length)}}
   setSave();
 }
@@ -1138,7 +1194,7 @@ function openAcc(name,grp){
   <div class="grid2"><label class="field"><span>分組</span><select id="a-g">${groupList().map(n=>`<option ${n===g0?'selected':''}>${esc(n)}</option>`).join('')}</select></label>
   <label class="field"><span>類型</span><select id="a-k">${Object.entries(ACC_KIND).map(([k,n])=>`<option value="${k}" ${k===k0?'selected':''}>${n}</option>`).join('')}</select></label></div>
   <label class="field"><span>信用卡結帳日（選填；核對帳單時用來算帳單期間）</span><input type="text" id="a-cd" inputmode="numeric" value="${a&&a.cd?a.cd:''}" placeholder="例如 15"></label>
-  <label class="field"><span>${a?'目前實際餘額／市值（用來校正，留空不變）':'目前餘額／股票現值'}</span><input type="text" id="a-b" inputmode="decimal" class="num" placeholder="${a?fmt((a.init||0)+bal):'0'}"></label>
+  <label class="field"><span>${a?'目前實際餘額／市值（用來校正，留空不變）':'目前餘額／股票現值'}<br><small class="muted">信用卡請直接填「欠款」的正數，例如 16585，系統會自動當成欠款</small></span><input type="text" id="a-b" inputmode="decimal" class="num" placeholder="${a?(a.k==='card'?fmt(Math.abs(Math.min(0,(a.init||0)+bal))):fmt((a.init||0)+bal)):'0'}"></label>
   ${a?`<label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="a-h" ${a.h?'checked':''}>移到「不再使用」（紀錄仍保留）</label>`:''}
   <div style="display:flex;gap:8px"><button class="btn p" style="flex:1" data-act="accsave">儲存</button></div>
   ${a?`<div class="lr"><span class="sm muted">調整順序</span><span class="mv"><button class="btn s" data-act="amv" data-d="-1">↑ 上移</button><button class="btn s" data-act="amv" data-d="1">↓ 下移</button></span></div>
@@ -1155,7 +1211,7 @@ function saveAcc(){
   const bal=sumByAccount(S.months)[old]||0;
   if(!a){a={n,k,g,init:0};st.accounts.push(a)}
   a.k=k;a.g=g;{const cd=parseInt($('#a-cd').value);a.cd=cd>0&&cd<=31?cd:undefined}const h=$('#a-h');if(h)a.h=h.checked;
-  if(b!==''){const v=parseFloat(b.replace(/,/g,''));if(isFinite(v))a.init=v-bal}
+  if(b!==''){let v=parseFloat(b.replace(/,/g,'').replace(/[－−–]/g,'-'));if(isFinite(v)){if(k==='card'&&v>0)v=-v;a.init=v-bal}}
   if(old&&n!==old){
     a.n=n;const touched=new Set();
     for(const m in S.months)S.months[m].forEach(r=>{if(r.ac===old){r.ac=n;touched.add(m)}});
@@ -1219,6 +1275,7 @@ function openSettings(){
   const st=S.settings;
   const expCats=Object.keys(st.cats.e);
   openSheet(`<div class="shd"><h3>設定</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div>
+  <button class="btn" style="margin-bottom:10px" data-act="goalloc">薪資分配與專案預算</button>
   <details open><summary>資料</summary><div>${S.mode==='cloud'?'<button class="btn" data-act="logout">登出</button>':''}
     <label class="btn" style="display:block;text-align:center">匯入 MOZE 匯出的 CSV<input type="file" id="imp" accept=".csv,text/csv" hidden></label>
     <div id="impInfo" class="sm muted">重複匯入同一份檔案不會產生重複紀錄。</div>
@@ -1272,7 +1329,20 @@ async function doImport(btn){
 
 /* ---------- actions ---------- */
 const ACTS={
-  goto:t=>{S.view=t.dataset.v;if(S.view==='stock'&&S.ready&&(!S.lastSync||Date.now()-S.lastSync>18e5))setTimeout(()=>syncPrices(false),50);try{history.replaceState(null,'','#'+S.view)}catch(e){}render();scrollTo(0,0)},
+  goalloc:()=>{closeSheet();S.view='alloc';render();scrollTo(0,0)},
+  goalform:t=>openGoalForm(t.dataset.id),
+  gpreset:t=>{syncGF();GF.name=t.dataset.n;GF.type=t.dataset.t;drawGoalForm()},
+  gsave:()=>{syncGF();const st=S.settings,num=v=>parseFloat(String(v).replace(/,/g,'')),tg=num(GF.target);
+    if(!GF.name.trim()){toast('請輸入名稱');return}if(!(tg>0)){toast('請輸入目標金額');return}
+    const g={id:GF.id||uid(),name:GF.name.trim(),type:GF.type,target:tg,due:GF.due||'',acc:GF.acc||'',cur:num(GF.cur)||0,note:(GF.note||'').trim(),done:!!GF.done};
+    st.goals=st.goals||[];const i=st.goals.findIndex(x=>x.id===g.id);if(i>=0)st.goals[i]=g;else st.goals.push(g);commitSettings();closeSheet();render();toast('已儲存')},
+  gdel:()=>{const st=S.settings;st.goals=(st.goals||[]).filter(x=>x.id!==GF.id);commitSettings();closeSheet();render();toast('已刪除')},
+  gdone:t=>{const g=(S.settings.goals||[]).find(x=>x.id===t.dataset.id);if(g){g.done=t.checked;commitSettings();render()}},
+  gmv:t=>{const st=S.settings,i=st.goals.findIndex(x=>x.id===t.dataset.id),j=i+ +t.dataset.d;if(j<0||j>=st.goals.length)return;[st.goals[i],st.goals[j]]=[st.goals[j],st.goals[i]];commitSettings();render()},
+  gdep:t=>{const g=S.settings.goals.find(x=>x.id===t.dataset.id);GF={id:g.id};openSheet(`<div class="shd"><h3>存入　${esc(g.name)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div><label class="field"><span>存入金額（要取出就填負數）</span><input type="text" id="g-dep" inputmode="decimal" class="num"></label><button class="btn p" data-act="gdepsave">儲存</button>`)},
+  gdepsave:()=>{const g=S.settings.goals.find(x=>x.id===GF.id),v=parseFloat(($('#g-dep').value||'').replace(/,/g,'').replace(/[－−–]/g,'-'));if(!isFinite(v)||v===0){toast('請輸入金額');return}g.cur=(+g.cur||0)+v;commitSettings();closeSheet();render();toast('已記錄')},
+  calmode:t=>{S.calMode=t.dataset.v;render()},
+  goto:t=>{S.view=t.dataset.v;if(S.view==='list'){S.view='cal';S.calMode='list'}else if(S.view==='cal'&&!S.calMode)S.calMode='cal';if(S.view==='stock'&&S.ready&&(!S.lastSync||Date.now()-S.lastSync>18e5))setTimeout(()=>syncPrices(false),50);try{history.replaceState(null,'','#'+S.view)}catch(e){}render();scrollTo(0,0)},
   mon:t=>{S.month=monthAdd(S.month,+t.dataset.n);S.day=null;render()},
   add:()=>openAdd(),
   edit:t=>{const id=t.dataset.id;for(const it of items(monthOf(findDate(id)))){if(it.id===id){openAdd(it);return}}},
@@ -1343,7 +1413,7 @@ const ACTS={
   tdel:t=>{const st=S.settings;st.trades=st.trades.filter(x=>x.id!==t.dataset.id);snapNow();commitSettings();render()},
   rep:t=>{S.rep=t.dataset.v;render()},
   hide:()=>{S.hide=!S.hide;render()},
-  gshut:t=>{S.shut[t.dataset.g]=!S.shut[t.dataset.g];render()},
+  gshut:t=>{S.shut[t.dataset.g]=!S.shut[t.dataset.g];try{localStorage.setItem('ledger_shut',JSON.stringify(S.shut))}catch(e){}render()},
   stat:t=>{S.stat=t.dataset.v;S.openCat='';render()},
   cat:t=>{S.openCat=S.openCat===t.dataset.c?'':t.dataset.c;render()},
   ftype:t=>{syncF();F.t=t.dataset.v;F.c='';F.s='';drawAdd()},
@@ -1402,8 +1472,8 @@ document.addEventListener('change',e=>{
   if(t.dataset.map!==undefined||t.dataset.rn!==undefined||t.dataset.rp!==undefined){if(AL){syncAL();if(t.dataset.rp!==undefined||t.dataset.rn!==undefined)drawAlloc()}}
 });
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#sheetHost').innerHTML)closeSheet()});
-addEventListener('hashchange',()=>{const v=location.hash.slice(1);if(VIEWS[v]&&v!==S.view){S.view=v;render()}});
-{const v=location.hash.slice(1);if(VIEWS[v])S.view=v}
+addEventListener('hashchange',()=>{const v=location.hash.slice(1);if((VIEWS[v]||TABOF[v])&&v!==S.view){S.view=v;render()}});
+{const v=location.hash.slice(1);if(VIEWS[v]||TABOF[v])S.view=v}
 render();
 initStore();
 </script>
