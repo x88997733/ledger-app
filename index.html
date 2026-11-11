@@ -982,7 +982,7 @@ function loanSched(l){
 }
 function loanRemain(l){
   const ps=(l.pays||[]).reduce((s,p)=>s+p.a,0);
-  if(l.sched&&l.kind!=='out'){const td=nowDate();return Math.max(0,loanSched(l).filter(x=>!x.pay||(x.pay.pre&&x.due>td)).reduce((s,x)=>s+x.a,0))}
+  if(l.sched&&l.kind!=='out'){const td=nowDate();return Math.max(0,loanSched(l).filter(x=>!x.pay||((x.pay.pre||l.kind==='inst')&&x.due>td)).reduce((s,x)=>s+x.a,0))}
   return Math.max(0,l.principal-ps);
 }
 const loanDone=l=>loanRemain(l)<=0;
@@ -996,8 +996,8 @@ function loanCardHtml(){
   const active=ls.filter(l=>!loanDone(l)),done=ls.filter(loanDone);
   return `<div class="card"><div class="lr"><h2 style="margin:0">借貸與分期</h2><button class="btn s" style="flex:none" data-act="loanform" data-id="">＋ 新增</button></div>
   ${dues.length?`<div style="margin-top:10px"><div class="lbl">本月到期／逾期</div>${dues.slice(0,6).map(x=>`<div class="lr sm" style="padding:6px 0"><span><b style="font-weight:500">${esc(x.l.name)}</b> 第${x.k}期<br><span class="${x.due<today?'exp':'muted'}">${x.due<today?'還沒記　':'到期　'}${x.due.slice(5).replace('-','/')}</span></span><span class="num${hide}" style="flex:none">$${fmt(x.a)}</span><button class="btn s" style="flex:none" data-act="loanpay" data-id="${esc(x.l.id)}" data-k="${x.k}">${x.l.kind==='out'?'已收':'記入'}</button></div>`).join('')}</div>`:''}
-  ${active.length?`<div style="margin-top:10px">${active.map(l=>{const nx=loanSched(l).find(x=>!x.pay);return `<button class="acrow" style="padding:8px 0" data-act="loanopen" data-id="${esc(l.id)}"><span class="rt" style="flex:1;min-width:0"><b style="font-weight:500;display:block">${esc(l.name)} <span class="tag2">${{out:'借出',in:'借入',inst:'分期'}[l.kind]}</span></b><small style="color:var(--muted)">${l.person?esc(l.person)+' · ':''}${nx?'下次 '+nx.due.slice(5).replace('-','/'):''}${l.sched?' · 剩 '+loanSched(l).filter(x=>!x.pay||(x.pay.pre&&x.due>nowDate())).length+' 期':''}</small></span><span class="amt${hide} ${l.kind==='out'?'inc':'exp'}">$${fmt(loanRemain(l))}</span></button>`}).join('')}</div>`:'<div class="muted sm" style="margin-top:8px">還沒有借貸或分期。可以記借給別人的錢、你的貸款，或信用卡分期。</div>'}
-  ${done.length?`<div class="muted sm" style="margin-top:6px">已結清 ${done.length} 筆（點「新增」旁的項目可在明細查看）</div>`:''}</div>`;
+  ${active.length?`<div style="margin-top:10px">${active.map(l=>{const nx=loanSched(l).find(x=>!x.pay);return `<button class="acrow" style="padding:8px 0" data-act="loanopen" data-id="${esc(l.id)}"><span class="rt" style="flex:1;min-width:0"><b style="font-weight:500;display:block">${esc(l.name)} <span class="tag2">${{out:'借出',in:'借入',inst:'分期'}[l.kind]}</span></b><small style="color:var(--muted)">${l.person?esc(l.person)+' · ':''}${nx?'下次 '+nx.due.slice(5).replace('-','/'):''}${l.sched?' · 剩 '+loanSched(l).filter(x=>!x.pay||((x.pay.pre||l.kind==='inst')&&x.due>nowDate())).length+' 期':''}</small></span><span class="amt${hide} ${l.kind==='out'?'inc':'exp'}">$${fmt(loanRemain(l))}</span></button>`}).join('')}</div>`:'<div class="muted sm" style="margin-top:8px">還沒有借貸或分期。可以記借給別人的錢、你的貸款，或信用卡分期。</div>'}
+  ${done.length?`<details style="margin-top:8px"><summary>已結清 ${done.length} 筆</summary><div>${done.map(l=>`<button class="acrow" style="padding:8px 0" data-act="loanopen" data-id="${esc(l.id)}"><span class="rt" style="flex:1;min-width:0"><b style="font-weight:500;display:block">${esc(l.name)}</b><small>${LK[l.kind]} · 本金 $${fmt(l.principal)} · 已結清 ✓</small></span></button>`).join('')}</div></details>`:''}</div>`;
 }
 function loanAutoBook(l){
   const st=S.settings,touched=new Set();let c=0;
