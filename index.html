@@ -217,7 +217,7 @@ input[type=month]{width:100%;min-height:44px;border:0;background:var(--surface);
 <div id="sheetHost"></div>
 <div id="toastHost"></div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="config.js"></script>
 <script>
 /*CORE*/
@@ -351,60 +351,12 @@ const TABOF={list:'cal',stock:'acct',alloc:'acct'};
 let F=null;
 
 /* ---------- storage ---------- */
-const pend=new Map(),flying=new Set();let pumping=false,lastErr='',progCb=null;
+let sb=null,USER=null;const pend=new Map(),flying=new Set();let pumping=false,lastErr='',progCb=null;
 const LS='ledger-v1';
-/* Google Drive storage: all documents live in one JSON file inside a "記帳本" folder.
-   The app only sees files it created itself (drive.file scope). */
-const GCFG=window.LEDGER_CONFIG||{};
-const DRIVE_DIR='記帳本',DRIVE_NAME='記帳本資料.json',DRIVE_SCOPE='https://www.googleapis.com/auth/drive.file';
-const GAPI='https://www.googleapis.com/drive/v3',GUP='https://www.googleapis.com/upload/drive/v3';
-let gClient=null,gTok=null,gExp=0,gFolder=null,gFile=null,gLoaded=false,docsCache={};
-const qStr=s=>"'"+String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")+"'";
-async function gfetch(url,opt={}){
-  if(!gTok||Date.now()>gExp){gTok=null;throw{code:'auth',message:'登入已過期'}}
-  const r=await fetch(url,{...opt,headers:{Authorization:'Bearer '+gTok,...(opt.headers||{})}});
-  if(r.status===401){gTok=null;throw{code:'auth',message:'登入已過期'}}
-  if(!r.ok)throw{code:'http_'+r.status,message:'Drive 回應 '+r.status};
-  return r;
-}
-async function ensureFolder(){
-  if(gFolder)return gFolder;
-  const q=`name = ${qStr(DRIVE_DIR)} and mimeType = 'application/vnd.google-apps.folder' and 'root' in parents and trashed = false`;
-  const j=await (await gfetch(GAPI+'/files?spaces=drive&fields=files(id)&q='+encodeURIComponent(q))).json();
-  if(j.files&&j.files[0])return gFolder=j.files[0].id;
-  const c=await gfetch(GAPI+'/files?fields=id',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:DRIVE_DIR,mimeType:'application/vnd.google-apps.folder'})});
-  return gFolder=(await c.json()).id;
-}
-async function ensureFile(){
-  if(gFile)return gFile;
-  const folder=await ensureFolder();
-  const q=`name = ${qStr(DRIVE_NAME)} and ${qStr(folder)} in parents and trashed = false`;
-  const j=await (await gfetch(GAPI+'/files?spaces=drive&fields=files(id)&q='+encodeURIComponent(q))).json();
-  return gFile=(j.files&&j.files[0]&&j.files[0].id)||null;
-}
-async function readRemote(){
-  const id=await ensureFile();
-  if(!id)return {};
-  const txt=await (await gfetch(GAPI+'/files/'+id+'?alt=media')).text();
-  return txt.trim()?JSON.parse(txt):{};
-}
-async function saveRemote(){
-  const body=JSON.stringify(docsCache);
-  const id=await ensureFile();
-  if(id){await gfetch(GUP+'/files/'+id+'?uploadType=media',{method:'PATCH',headers:{'content-type':'application/json'},body});return}
-  const folder=await ensureFolder(),b='ledger'+Date.now();
-  const meta=JSON.stringify({name:DRIVE_NAME,parents:[folder],mimeType:'application/json'});
-  const multi=`--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${meta}\r\n--${b}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${b}--`;
-  const r=await gfetch(GUP+'/files?uploadType=multipart&fields=id',{method:'POST',headers:{'content-type':'multipart/related; boundary='+b},body:multi});
-  gFile=(await r.json()).id;
-}
 async function writeDoc(id,data){
   if(S.mode==='cloud'){
-    if(!gLoaded)throw{code:'not_loaded',message:'尚未讀取雲端資料'};
-    docsCache[id]=data;
-    try{await saveRemote()}catch(e){throw e.code?e:{code:'network',message:String(e)}}
-    return;
-  }
+    const {error}=await sb.from('ledger_docs').upsert({user_id:USER.id,id,data,updated_at:new Date().toISOString()});
+    if(error)throw{code:error.code||'error',message:error.message};return}
   try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');cur[id]=data;localStorage.setItem(LS,JSON.stringify(cur))}catch(e){throw{code:'local_failed'}}
 }
 function persist(id,data){pend.set(id,data);setSave();pump()}
@@ -420,7 +372,7 @@ async function pump(){
 }
 const drain=()=>new Promise(res=>{const t=setInterval(()=>{if(!pend.size&&!pumping||lastErr){clearInterval(t);res()}},120)});
 function setSave(){const el=document.getElementById('saveState');if(!el)return;
-  el.textContent=pumping||pend.size?'儲存中…':S.mode==='local'?'未登入：資料只存在這個瀏覽器':S.ready?(gTok?'已同步到 Google 雲端硬碟':'登入已過期，請重新登入'):''}
+  el.textContent=pumping||pend.size?'儲存中…':S.mode==='local'?'未登入：資料只存在這個瀏覽器':S.ready?'已同步到雲端 · '+(USER&&USER.email||''):''}
 const commitMonth=m=>persist('m_'+m,{records:S.months[m]||[]});
 function normOrder(st){
   const ro=st.ratioOrder;if(Array.isArray(ro)){const o={};ro.forEach(k=>{if(st.ratios[k]!==undefined)o[k]=st.ratios[k]});Object.keys(st.ratios).forEach(k=>{if(o[k]===undefined)o[k]=st.ratios[k]});st.ratios=o}
@@ -437,48 +389,35 @@ function showLogin(msg){
   $('#app').hidden=true;$('#tabs').hidden=true;$('#fab').hidden=true;
   const el=$('#login');el.hidden=false;
   el.innerHTML=`<div class="card" style="max-width:420px;margin:12vh auto 0;display:flex;flex-direction:column;gap:12px">
-   <h2 style="font-size:24px;margin:0;font-family:var(--serif)">金流手帳</h2><p style="margin:0;font-family:var(--serif);font-size:17px">把每一筆錢的去向，好好記下來。</p><p class="muted sm" style="margin:0">資料會存在你自己的 Google 雲端硬碟「記帳本」資料夾，用同一個 Google 帳號登入，手機、電腦都能同步。</p>
+   <h2 style="font-size:24px;margin:0;font-family:var(--serif)">金流手帳</h2><p style="margin:0;font-family:var(--serif);font-size:17px">把每一筆錢的去向，好好記下來。</p><p class="muted sm" style="margin:0">登入後資料會安全存在雲端，手機、電腦都能同步。</p>
    <button class="btn p" id="gbtn">用 Google 登入</button>
+   <div class="muted sm" style="text-align:center">或輸入 Email，我們寄一條登入連結給你，不用記密碼</div>
+   <input type="text" id="em" inputmode="email" placeholder="you@example.com" autocomplete="email">
+   <button class="btn" id="ebtn">寄登入連結</button>
    <div class="sm" id="lmsg" role="status">${esc(msg||'')}</div></div>`;
-  $('#gbtn').onclick=()=>gSignIn();
+  $('#gbtn').onclick=()=>sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});
+  $('#ebtn').onclick=async()=>{const e=$('#em').value.trim();if(!e)return;
+    const {error}=await sb.auth.signInWithOtp({email:e,options:{emailRedirectTo:location.origin+location.pathname}});
+    $('#lmsg').textContent=error?'寄送失敗：'+error.message:'已寄出，請到信箱點連結登入。'};
 }
-function gSignIn(){
-  if(!gClient){toast('Google 登入還沒準備好，請重新整理頁面');return}
-  gClient.requestAccessToken();
-}
-function onGisToken(r){
-  gTok=r.access_token;gExp=Date.now()+(Number(r.expires_in||3600)-60)*1000;
-  if(!gLoaded)loadCloud();
-  else{setSave();pump()}   // token renewed after expiry: flush pending writes
-}
-function onGisError(e){
-  const t=(e&&e.type)||'';
-  if(!gLoaded){showLogin(t==='popup_closed'?'登入視窗已關閉，請再試一次。':'請用 Google 登入。');return}
-  setSave();if(S.mode==='cloud')toast('登入已過期，請在頁面上點「重新登入」');
-}
-function gisReady(ms=6000){return new Promise(res=>{const t0=Date.now();(function p(){if(window.google&&google.accounts&&google.accounts.oauth2)return res(true);if(Date.now()-t0>ms)return res(false);setTimeout(p,100)})()})}
 async function loadCloud(){
   $('#login').hidden=true;$('#app').hidden=false;$('#tabs').hidden=false;$('#fab').hidden=false;
   S.mode='cloud';S.ready=false;render();
-  try{docsCache=await readRemote()}catch(e){S.slow=true;S.err=e.code||'error';render();toast('讀取雲端資料失敗，請重新整理再試');return}
-  gLoaded=true;
-  const cloudEmpty=!Object.keys(docsCache).length;
-  for(const id in docsCache)applyDoc(id,docsCache[id]);
-  // one-time: bring over data entered while logged out (only if the Drive file is still empty)
-  try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');if(cloudEmpty&&Object.keys(cur).length){for(const k in cur){applyDoc(k,cur[k]);persist(k,cur[k])}localStorage.removeItem(LS);toast('已把這個瀏覽器的資料搬到雲端')}}catch(e){}
+  const {data,error}=await sb.from('ledger_docs').select('id,data').eq('user_id',USER.id).limit(5000);
+  if(error){S.slow=true;S.err=error.code;render();return}
+  data.forEach(d=>applyDoc(d.id,d.data));
+  // one-time: bring over data entered while logged out
+  try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');if(!data.length&&Object.keys(cur).length){for(const k in cur){applyDoc(k,cur[k]);persist(k,cur[k])}localStorage.removeItem(LS);toast('已把這個瀏覽器的資料搬到雲端')}}catch(e){}
   S.ready=true;ensureRecurring();render();
 }
 async function initStore(){
-  const ok=await gisReady();
-  if(!ok||!GCFG.gisClientId){S.mode='local';try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');for(const k in cur)applyDoc(k,cur[k])}catch(e){}S.ready=true;ensureRecurring();render();return}
-  gClient=google.accounts.oauth2.initTokenClient({
-    client_id:GCFG.gisClientId,scope:DRIVE_SCOPE,
-    callback:r=>{if(r.error)onGisError(r);else onGisToken(r)},
-    error_callback:onGisError
+  const cfg=window.LEDGER_CONFIG||{};
+  if(!window.supabase||!cfg.url||/YOUR_/.test(cfg.url)){S.mode='local';try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');for(const k in cur)applyDoc(k,cur[k])}catch(e){}S.ready=true;ensureRecurring();render();return}
+  sb=supabase.createClient(cfg.url,cfg.anonKey);
+  sb.auth.onAuthStateChange((ev,sess)=>{
+    if(sess&&sess.user){if(!USER||USER.id!==sess.user.id){USER=sess.user;loadCloud()}}
+    else if(ev==='SIGNED_OUT'||ev==='INITIAL_SESSION'){USER=null;showLogin()}
   });
-  // try a silent sign-in first; if it cannot complete, the login card asks for a click
-  gClient.requestAccessToken({prompt:''});
-  setTimeout(()=>{if(!gLoaded&&!gTok)showLogin()},8000);
 }
 function ensureRecurring(){
   const now=nowDate(),cur=monthOf(now),touched=new Set();
@@ -560,7 +499,6 @@ function bannerHtml(){
   if(S.slow&&!S.ready)return `<div class="banner" role="alert">還沒連上雲端帳本，為了避免蓋掉舊資料，暫時無法新增紀錄。請確認網路後重新開啟頁面。</div>`;
   if(!S.ready)return `<div class="banner">正在讀取你的帳本…</div>`;
   if(S.mode==='local')return `<div class="banner">目前沒有登入雲端儲存，資料只會留在這個瀏覽器。請在「設定 → 資料」定期匯出備份。</div>`;
-  if(S.mode==='cloud'&&gLoaded&&!gTok)return `<div class="banner" role="alert">登入已過期，新的紀錄暫時無法同步。<button class="btn sm" data-act="relogin">重新登入</button></div>`;
   return '';
 }
 function emptyHtml(){
@@ -900,8 +838,9 @@ async function chatSend(){
   const el=$('#ch-in'),t=el&&el.value.trim();if(!t||S.chatBusy)return;
   S.chat=S.chat||[];S.chat.push({role:'user',content:t});S.chatBusy=true;drawChat();
   try{
-    throw{m:'AI 對話已停用。'};
-    const r=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({messages:chatHistory(),context:chatContext()})});
+    const {data}=await sb.auth.getSession(),tok=data&&data.session&&data.session.access_token;
+    if(!tok)throw{m:'登入已過期，請重新整理頁面登入'};
+    const r=await fetch('/api/chat',{method:'POST',headers:{'content-type':'application/json',Authorization:'Bearer '+tok},body:JSON.stringify({messages:chatHistory(),context:chatContext()})});
     const j=await r.json().catch(()=>({}));
     if(!r.ok){const m={not_configured:'AI 還沒設定好：Vercel 需要設定 ANTHROPIC_API_KEY 與 ALLOWED_EMAILS，設定後重新部署。',not_allowed:'這個帳號沒有使用 AI 的權限。',login:'登入已過期，請重新登入。',upstream:'AI 服務暫時無法使用（'+(j.detail||j.status||'')+'）',upstream_unreachable:'連不上 AI 服務，請稍後再試。'}[j.error]||'發生錯誤，請稍後再試。';throw{m}}
     S.chat.push({role:'assistant',content:j.text||'（已提出調整，請看下面）',props:(j.proposals||[]).map(p=>({name:p.name,input:p.input,state:'new'}))});
@@ -922,7 +861,7 @@ function openAssist(){
   const tab=S.atab||'chk';
   const head=`<div class="shd"><h3>${tab==='chat'?'AI 助手':'整理助手　'+mLabel(S.month)}</h3><button class="ibtn" data-act="close" aria-label="關閉">${icon('x')}</button></div><div class="seg" role="group" aria-label="功能"><button aria-pressed="${tab==='chk'}" data-act="atab" data-v="chk">檢查</button><button aria-pressed="${tab==='chat'}" data-act="atab" data-v="chat">AI 對話</button></div>`;
   if(tab==='chat'){
-    openSheet(head+'<div class="banner">AI 對話已停用。</div>');
+    openSheet(head+(S.mode==='cloud'?`<div id="chbox" style="display:flex;flex-direction:column;gap:12px">${chatHtml()}</div>`:'<div class="banner">AI 對話需要先登入雲端帳號才能使用。</div>'));
     const c=$('.chat');if(c)c.scrollTop=c.scrollHeight;return}
   const is=assistIssues(),n=is.filter(i=>i.lvl===2).length;
   openSheet(head+`
@@ -1564,8 +1503,7 @@ const ACTS={
   fsave:t=>{syncF();const ns=$('#f-newsub');if(ns&&ns.value.trim())F.s=ns.value.trim();saveRec(!!t.dataset.again)},
   fdel:t=>{if(t.dataset.sure){deleteRec();return}t.dataset.sure='1';t.textContent='再按一次確認刪除'},
   settings:()=>openSettings(),
-  logout:()=>{if(gTok&&window.google&&google.accounts)google.accounts.oauth2.revoke(gTok,()=>{});gTok=null;location.reload()},
-  relogin:()=>gSignIn(),
+  logout:()=>{sb&&sb.auth.signOut().then(()=>location.reload())},
   acc:t=>openAcc(t.dataset.n,t.dataset.g),
   gadd:()=>{const i=$('#g-new'),n=i.value.trim();if(!n)return;const gs=S.settings.groups=S.settings.groups||[];if(gs.includes(n)||n==='不再使用'){toast('已經有這個分組');return}gs.push(n);commitSettings();openSettings();render()},
   gdel:t=>{const n=t.dataset.g;if(S.settings.accounts.some(a=>grpOf(a)===n)){toast('分組裡還有項目，請先移走');return}S.settings.groups=S.settings.groups.filter(x=>x!==n);commitSettings();openSettings();render()},
