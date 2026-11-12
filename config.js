@@ -1,2 +1,2 @@
-// Supabase 公開金鑰（可放前端；資料靠 RLS 保護）
-window.LEDGER_CONFIG={url:"https://bkoifruqixrrssopivyx.supabase.co",anonKey:"sb_publishable_rznlz_sSW-ymsZUp2enM3w_qqb5cUHw"};
+// Google OAuth 用戶端 ID（公開值，可放前端；不需要用戶端密碼）
+window.LEDGER_CONFIG={gisClientId:"102775915860-aik5act0ncnt0bsfu9fot3s53n8fhbcr.apps.googleusercontent.com"};
