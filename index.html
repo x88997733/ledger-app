@@ -480,6 +480,10 @@ function rowHtml(it){
   sub=[r.ac,r.n,r.p].filter(Boolean).join(' · ');
   return `<button class="row" data-act="edit" data-id="${esc(r.id)}">${cic(r.c||r.t)}<span class="rt"><b>${esc(title)}</b><small>${esc(sub)}</small></span><span class="amt ${cls}">${sign}${fmt(Math.abs(r.a))}</span></button>`;
 }
+let DD=null;
+function ddRecs(){const k=DD.k,kind=DD.kind;return recs(S.month).filter(isExp).filter(r=>kind==='p'?(r.p||'未分類')===k:kind==='ac'?r.ac===k:(r.c||'未分類')===k).sort((a,b)=>(b.d+(b.tm||'')).localeCompare(a.d+(a.tm||'')))}
+function drawDD(){const rs=ddRecs(),tot=rs.reduce((s,r)=>s-r.a,0);
+  openSheet(`<div class="lr"><h2 style="margin:0">${esc(DD.k)}　<span class="num">${fmt(tot)}</span></h2><button class="btn s" data-act="ddclose">關閉</button></div><div class="sm muted" style="margin:4px 0 8px">${S.month.replace('-','年')}月 · ${rs.length} 筆 · 點一筆可修改分類／專案</div>${rs.length?`<div class="rows">${rs.map(r=>rowHtml({kind:'r',r,id:r.id,d:r.d})).join('')}</div>`:'<div class="muted" style="text-align:center;padding:16px">沒有紀錄了</div>'}`)}
 function listBlock(its){
   const days=[];const map={};
   for(const it of its){if(!map[it.d]){map[it.d]=[];days.push(it.d)}map[it.d].push(it)}
@@ -608,7 +612,7 @@ function vStats(){
     body=`<div class="card"><h2>本月最大 10 筆支出</h2>${top.map((r,i)=>`<div class="lr" style="padding:8px 0"><span class="muted num" style="flex:none;width:22px">${i+1}</span><span style="min-width:0"><b style="font-weight:500">${esc(r.c)}${r.s?' · '+esc(r.s):''}</b><div class="sm muted">${r.d.slice(5).replace('-','/')} ${esc(r.n||r.ac)}</div></span><span class="amt exp" style="flex:none">${fmt(-r.a)}</span></div>`).join('')||'<div class="muted" style="text-align:center">還沒有資料</div>'}</div>`;
   }else{
     const g=S.rep==='acc'?grp(ex,r=>r.ac):grp(ex,r=>r.p);
-    body=`<div class="card"><h2>${S.rep==='acc'?'各帳戶':'各專案'}支出</h2>${g.map(([k,v])=>`<div class="lr" style="padding:6px 0"><span>${esc(k)}</span><span class="amt">${fmt(v)}</span></div><div class="bar"><i style="width:${e?v/e*100:0}%"></i></div>`).join('<div style="height:8px"></div>')||'<div class="muted" style="text-align:center">還沒有資料</div>'}</div>`;
+    body=`<div class="card"><h2>${S.rep==='acc'?'各帳戶':'各專案'}支出</h2>${g.map(([k,v])=>`<button class="lr" style="padding:6px 0;width:100%;border:0;background:none;color:inherit;font:inherit;text-align:left" data-act="dd" data-k="${esc(k)}" data-kind="${S.rep==='acc'?'ac':'p'}"><span>${esc(k)} <small class="muted">›</small></span><span class="amt">${fmt(v)}</span></button><div class="bar"><i style="width:${e?v/e*100:0}%"></i></div>`).join('<div style="height:8px"></div>')||'<div class="muted" style="text-align:center">還沒有資料</div>'}</div>`;
   }
   return sub+body;
 }
@@ -1204,9 +1208,9 @@ function saveRec(again){
   if(F.t==='x'&&F.bill)st.payFrom=F.ac;
   st.lastAcc=F.ac;commitSettings();touched.forEach(commitMonth);
   const keepT=F.t,keepAc=F.ac,keepTo=F.to,d=F.d;
-  if(!(RC&&RC.back))S.month=monthOf(F.d);
+  if(!(RC&&RC.back)&&!DD)S.month=monthOf(F.d);
   if(again){F={mode:'add',t:keepT,id:'',a:'',c:'',s:'',ac:keepAc,to:keepTo,d,tm:'',n:'',p:''};drawAdd();toast('已儲存')}
-  else{closeSheet();toast('已儲存');if(RC&&RC.back){RC.back=false;render();drawRecon();
+  else{closeSheet();toast('已儲存');if(DD){render();drawDD()}if(RC&&RC.back){RC.back=false;render();drawRecon();
     const a0=S.settings.accounts.find(x=>x.n===RC.card),[p0,p1]=cardPeriod(S.month,a0.cd,a0.lag!==0);
     if(keepAc!==RC.card||d<p0||d>p1)setTimeout(()=>toast('這筆不在這張卡這期（'+p0.slice(5)+'～'+p1.slice(5)+'）的帳單內，所以沒列入核對'),300);
     return}}
@@ -1217,7 +1221,7 @@ function deleteRec(){
   ids.forEach(id=>{if(String(id).startsWith('rc_')&&!S.settings.skip.includes(id))S.settings.skip.push(id)});
   const touched=new Set();
   for(const m in S.months){const n=S.months[m].length;S.months[m]=S.months[m].filter(r=>!ids.includes(r.id));if(S.months[m].length!==n)touched.add(m)}
-  commitSettings();touched.forEach(commitMonth);closeSheet();render();toast('已刪除');if(RC&&RC.back){RC.back=false;drawRecon()}
+  commitSettings();touched.forEach(commitMonth);closeSheet();render();toast('已刪除');if(DD)drawDD();if(RC&&RC.back){RC.back=false;drawRecon()}
 }
 
 /* ---------- account sheet ---------- */
@@ -1417,9 +1421,11 @@ const ACTS={
   goto:t=>{S.view=t.dataset.v;if(S.view==='list'){S.view='cal';S.calMode='list'}else if(S.view==='cal'&&!S.calMode)S.calMode='cal';if(S.view==='stock'&&S.ready&&(!S.lastSync||Date.now()-S.lastSync>18e5))setTimeout(()=>syncPrices(false),50);try{history.replaceState(null,'','#'+S.view)}catch(e){}render();scrollTo(0,0)},
   mon:t=>{S.month=monthAdd(S.month,+t.dataset.n);S.day=null;render()},
   add:()=>openAdd(),
+  dd:t=>{DD={k:t.dataset.k,kind:t.dataset.kind};drawDD()},
+  ddclose:()=>{DD=null;closeSheet()},
   edit:t=>{const id=t.dataset.id;for(const it of items(monthOf(findDate(id)))){if(it.id===id){openAdd(it);return}}},
-  close:()=>{closeSheet();if(RC&&RC.back){RC.back=false;drawRecon()}},
-  bg:(t,e)=>{if(e.target===t&&BGD)closeSheet()},
+  close:()=>{const wf=!!F;closeSheet();if(DD&&wf)drawDD();else DD=null;if(RC&&RC.back){RC.back=false;drawRecon()}},
+  bg:(t,e)=>{if(e.target===t&&BGD){DD=null;closeSheet()}},
   day:t=>{S.day=S.day===t.dataset.d?null:t.dataset.d;render()},
   cty:t=>{S.cty=t.dataset.v;render()},
   scope:t=>{S.scope=t.dataset.v;render()},
