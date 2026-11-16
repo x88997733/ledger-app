@@ -1175,7 +1175,7 @@ function drawAdd(){
     h+=`<div class="card" style="background:var(--bg);box-shadow:none"><label class="sm" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="f-ion" ${I.on?'checked':''}><b style="font-weight:500">這是分期付款</b></label>
     <div class="sm muted" style="margin-top:4px">${I.on?(F.mode==='edit'?'儲存後會刪除這筆一次性支出，改成每期自動記一筆支出到這張卡。':'不會一次記全額，而是每期繳款時才記一筆支出到這張卡，方便和帳單核對。'):'勾選後可以設定期數，每期自動入帳。'}</div>
     ${I.on?`<div class="grid2" style="margin-top:10px"><label class="field"><span>總期數</span><input type="text" id="f-ip" inputmode="numeric" value="${esc(I.periods)}" placeholder="例如 12"></label><label class="field"><span>每期金額（留空自動平分）</span><input type="text" id="f-iper" inputmode="numeric" value="${esc(I.per)}" placeholder="${F.a&&I.periods?Math.ceil(parseFloat(F.a)/parseInt(I.periods)||0)||'':''}"></label><label class="field"><span>第 1 期月份</span><input type="month" id="f-ism" value="${esc(I.startMonth)}"></label><label class="field"><span>每月幾號</span><input type="text" id="f-idd" inputmode="numeric" value="${esc(I.dueDay)}"></label></div>`:''}</div>`}
-  h+=`<div class="grid2"><label class="field"><span>日期</span><input type="date" id="f-d" value="${esc(F.d)}"></label>${F.t==='x'?'':`<label class="field"><span>專案（選填）</span><input type="text" id="f-p" list="projs" value="${esc(F.p||'')}"><datalist id="projs">${projs.map(p=>`<option value="${esc(p)}">`).join('')}</datalist></label>`}</div>
+  h+=`<div class="grid2"><label class="field"><span>日期</span><input type="date" id="f-d" value="${esc(F.d)}"></label>${F.t==='x'?'':`<label class="field"><span>專案</span><select id="f-p">${(()=>{const L=[...new Set([...projs,...Object.keys(S.settings.projectMap||{})])];if(F.p&&!L.includes(F.p))L.push(F.p);return `<option value="" ${!F.p&&!F.pnew?'selected':''}>不指定</option>`+L.map(p=>`<option value="${esc(p)}" ${F.p===p&&!F.pnew?'selected':''}>${esc(p)}</option>`).join('')+`<option value="__new" ${F.pnew?'selected':''}>＋ 新增專案…</option>`})()}</select>${F.pnew?`<input type="text" id="f-pn" value="${esc(F.p||'')}" placeholder="輸入新專案名稱" style="margin-top:6px">`:''}</label>`}</div>
   <label class="field"><span>備註</span><input type="text" id="f-n" value="${esc(F.n)}" placeholder="例如：和朋友吃晚餐"></label>
   <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn p" style="flex:1" data-act="fsave">儲存</button>${F.mode==='add'&&!(RC&&RC.back)?'<button class="btn" data-act="fsave" data-again="1">儲存並再記一筆</button>':'<button class="btn d" data-act="fdel">刪除</button>'}</div>`;
   openSheet(h);
@@ -1542,7 +1542,7 @@ const ACTS={
 function findDate(id){for(const m in S.months)if(S.months[m].some(r=>r.id===id))return m+'-01';return S.month+'-01'}
 function syncF(){if(!F)return;const g=id=>document.getElementById(id);
   if(g('f-a'))F.a=g('f-a').value;if(g('f-ac'))F.ac=g('f-ac').value;if(g('f-to'))F.to=g('f-to').value;
-  if(g('f-d'))F.d=g('f-d').value;if(F.inst){if(g('f-ion'))F.inst.on=g('f-ion').checked;if(g('f-ip'))F.inst.periods=g('f-ip').value;if(g('f-iper'))F.inst.per=g('f-iper').value;if(g('f-ism'))F.inst.startMonth=g('f-ism').value;if(g('f-idd'))F.inst.dueDay=g('f-idd').value}if(g('f-n'))F.n=g('f-n').value;if(g('f-p'))F.p=g('f-p').value}
+  if(g('f-d'))F.d=g('f-d').value;if(F.inst){if(g('f-ion'))F.inst.on=g('f-ion').checked;if(g('f-ip'))F.inst.periods=g('f-ip').value;if(g('f-iper'))F.inst.per=g('f-iper').value;if(g('f-ism'))F.inst.startMonth=g('f-ism').value;if(g('f-idd'))F.inst.dueDay=g('f-idd').value}if(g('f-n'))F.n=g('f-n').value;if(g('f-p'))F.p=g('f-p').value==='__new'?((g('f-pn')&&g('f-pn').value.trim())||''):g('f-p').value;F.pnew=g('f-p').value==='__new'}
 
 /* drag-to-reorder: handles carry data-mv=<action>; dropping calls the action once per step */
 document.addEventListener('pointerdown',e=>{
@@ -1587,6 +1587,7 @@ document.addEventListener('change',e=>{
   const t=e.target;
   if(t.id==='rc-c'||t.id==='re-c'){const sd=document.getElementById(t.id==='rc-c'?'rc-s':'re-s');if(sd)sd.innerHTML=subOpts(t.value,'');return}
   if((t.id==='rc-amt'||t.id==='rc-cd'||t.id==='rc-lag')&&RC){setTimeout(()=>{if(!document.getElementById('rc-amt'))return;const y=$('.sheet').scrollTop;rcSave();$('.sheet').scrollTop=y},0);return}
+  if(F&&t.id==='f-p'){syncF();drawAdd();if(F.pnew){const n=document.getElementById('f-pn');if(n)n.focus()}return}
   if(F&&F.t!==undefined&&(t.id==='f-ion'||t.id==='f-ac')&&document.getElementById('f-a')){syncF();drawAdd();return}
   if(t.id==='imp'&&t.files[0])onImport(t.files[0]);
   if(t.id==='hist'&&t.files[0])onHist(t.files[0]);
