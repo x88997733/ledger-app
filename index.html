@@ -603,7 +603,7 @@ function vStats(){
     const rowsH=list.map(([c,o])=>{const pc=total>0?o.v/total*100:0,b=ty==='e'?+bud[c]||0:0,open=S.openCat===c;
       return `<div><button class="row" style="padding:10px 0;border:0;background:none" data-act="cat" data-c="${esc(c)}" aria-expanded="${open}">${cic(c)}<span class="rt"><b>${esc(c)}</b><small class="num">${pc.toFixed(1)}%${b?' · 預算 '+fmt(b)+(o.v>b?' · 超出 '+fmt(o.v-b):' · 剩 '+fmt(b-o.v)):''}</small></span><span class="amt">${fmt(o.v)}</span></button>
       <div class="bar ${b&&o.v>b?'over':''}"><i style="width:${Math.min(100,b?o.v/b*100:pc)}%"></i></div>
-      ${open?`<div style="padding:6px 0 4px 22px">${Object.entries(o.sub).sort((a,b)=>b[1]-a[1]).map(([s,v])=>`<div class="lr sm" style="padding:3px 0"><span>${esc(s)}</span><span class="num">${fmt(v)}</span></div>`).join('')}</div>`:''}</div>`}).join('<div style="height:10px"></div>');
+      ${open?`<div style="padding:6px 0 4px 22px">${Object.entries(o.sub).sort((a,b)=>b[1]-a[1]).map(([s,v])=>`<div class="lr sm" style="padding:3px 0"><span>${esc(s)}</span><span class="num">${fmt(v)}</span></div>`).join('')}${ty==='e'?`<button class="btn s" style="margin-top:6px" data-act="dd" data-kind="c" data-k="${esc(c)}">查看明細並編輯 ›</button>`:''}</div>`:''}</div>`}).join('<div style="height:10px"></div>');
     body=`<div class="seg" role="group" aria-label="類型"><button aria-pressed="${ty==='e'}" data-act="stat" data-v="e">支出</button><button aria-pressed="${ty==='i'}" data-act="stat" data-v="i">收入</button></div><div class="card"><h2>${ty==='e'?'支出':'收入'}分類　<span class="num">${fmt(total)}</span></h2>${list.length?rowsH:'<div class="muted" style="text-align:center;padding:12px">這個月還沒有紀錄</div>'}</div>`;
   }else if(S.rep==='loan'){
     body=loanCardHtml();
