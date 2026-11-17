@@ -408,16 +408,29 @@ async function loadCloud(){
   data.forEach(d=>applyDoc(d.id,d.data));
   // one-time: bring over data entered while logged out
   try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');if(!data.length&&Object.keys(cur).length){for(const k in cur){applyDoc(k,cur[k]);persist(k,cur[k])}localStorage.removeItem(LS);toast('已把這個瀏覽器的資料搬到雲端')}}catch(e){}
-  S.ready=true;ensureRecurring();render();
+  S.ready=true;ensureRecurring();render();deepLink();
 }
 async function initStore(){
   const cfg=window.LEDGER_CONFIG||{};
-  if(!window.supabase||!cfg.url||/YOUR_/.test(cfg.url)){S.mode='local';try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');for(const k in cur)applyDoc(k,cur[k])}catch(e){}S.ready=true;ensureRecurring();render();return}
+  if(!window.supabase||!cfg.url||/YOUR_/.test(cfg.url)){S.mode='local';try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');for(const k in cur)applyDoc(k,cur[k])}catch(e){}S.ready=true;ensureRecurring();render();deepLink();return}
   sb=supabase.createClient(cfg.url,cfg.anonKey);
   sb.auth.onAuthStateChange((ev,sess)=>{
     if(sess&&sess.user){if(!USER||USER.id!==sess.user.id){USER=sess.user;loadCloud()}}
     else if(ev==='SIGNED_OUT'||ev==='INITIAL_SESSION'){USER=null;showLogin()}
   });
+}
+/* 網址捷徑：?add=1&a=金額&n=備註&ac=帳戶&t=i（收入）→ 直接打開新增表單。給 iPhone 捷徑用 */
+function deepLink(){
+  const q=new URLSearchParams(location.search);
+  if(!q.has('add')||!S.ready)return;
+  history.replaceState(null,'',location.pathname+location.hash);
+  openAdd();
+  if(!F)return;
+  const a=parseFloat(q.get('a'));if(isFinite(a)&&a>0)F.a=String(a);
+  const n=(q.get('n')||'').trim();if(n)F.n=n.slice(0,80);
+  const ac=q.get('ac');if(ac&&activeNames().includes(ac))F.ac=ac;
+  if(q.get('t')==='i')F.t='i';
+  drawAdd();
 }
 function ensureRecurring(){
   const now=nowDate(),cur=monthOf(now),touched=new Set();
