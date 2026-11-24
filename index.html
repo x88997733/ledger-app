@@ -408,29 +408,16 @@ async function loadCloud(){
   data.forEach(d=>applyDoc(d.id,d.data));
   // one-time: bring over data entered while logged out
   try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');if(!data.length&&Object.keys(cur).length){for(const k in cur){applyDoc(k,cur[k]);persist(k,cur[k])}localStorage.removeItem(LS);toast('已把這個瀏覽器的資料搬到雲端')}}catch(e){}
-  S.ready=true;ensureRecurring();render();deepLink();
+  S.ready=true;ensureRecurring();render();
 }
 async function initStore(){
   const cfg=window.LEDGER_CONFIG||{};
-  if(!window.supabase||!cfg.url||/YOUR_/.test(cfg.url)){S.mode='local';try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');for(const k in cur)applyDoc(k,cur[k])}catch(e){}S.ready=true;ensureRecurring();render();deepLink();return}
+  if(!window.supabase||!cfg.url||/YOUR_/.test(cfg.url)){S.mode='local';try{const cur=JSON.parse(localStorage.getItem(LS)||'{}');for(const k in cur)applyDoc(k,cur[k])}catch(e){}S.ready=true;ensureRecurring();render();return}
   sb=supabase.createClient(cfg.url,cfg.anonKey);
   sb.auth.onAuthStateChange((ev,sess)=>{
     if(sess&&sess.user){if(!USER||USER.id!==sess.user.id){USER=sess.user;loadCloud()}}
     else if(ev==='SIGNED_OUT'||ev==='INITIAL_SESSION'){USER=null;showLogin()}
   });
-}
-/* 網址捷徑：?add=1&a=金額&n=備註&ac=帳戶&t=i（收入）→ 直接打開新增表單。給 iPhone 捷徑用 */
-function deepLink(){
-  const q=new URLSearchParams(location.search);
-  if(!q.has('add')||!S.ready)return;
-  history.replaceState(null,'',location.pathname+location.hash);
-  openAdd();
-  if(!F)return;
-  const a=parseFloat(q.get('a'));if(isFinite(a)&&a>0)F.a=String(a);
-  const n=(q.get('n')||'').trim();if(n)F.n=n.slice(0,80);
-  const ac=q.get('ac');if(ac&&activeNames().includes(ac))F.ac=ac;
-  if(q.get('t')==='i')F.t='i';
-  drawAdd();
 }
 function ensureRecurring(){
   const now=nowDate(),cur=monthOf(now),touched=new Set();
@@ -493,6 +480,7 @@ function rowHtml(it){
   sub=[r.ac,r.n,r.p].filter(Boolean).join(' · ');
   return `<button class="row" data-act="edit" data-id="${esc(r.id)}">${cic(r.c||r.t)}<span class="rt"><b>${esc(title)}</b><small>${esc(sub)}</small></span><span class="amt ${cls}">${sign}${fmt(Math.abs(r.a))}</span></button>`;
 }
+function applyDef(k){if(!F||F.mode!=='add'||F.t!=='e')return;const d=(S.settings.catDef||{})[k];if(!d)return;if(S.settings.accounts.some(a=>a.n===d.ac))F.ac=d.ac;F.p=d.p||'';F.pnew=false}
 let DD=null;
 function ddRecs(){const k=DD.k,kind=DD.kind;return recs(S.month).filter(isExp).filter(r=>kind==='p'?(r.p||'未分類')===k:kind==='ac'?r.ac===k:(r.c||'未分類')===k).sort((a,b)=>(b.d+(b.tm||'')).localeCompare(a.d+(a.tm||'')))}
 function drawDD(){const rs=ddRecs(),tot=rs.reduce((s,r)=>s-r.a,0);
@@ -1219,6 +1207,7 @@ function saveRec(again){
   else put({id:F.id||uid(),t:F.t,a:F.t==='e'?-a:a,c:F.c,s:F.s,ac:F.ac,d:F.d,tm,n:F.n,p:F.p||'',o:F.o||''});
   if(F.c&&F.s){const k=F.t==='i'?'i':'e',l=st.cats[k][F.c]||(st.cats[k][F.c]=[]);if(!l.includes(F.s))l.push(F.s)}
   if(F.t==='x'&&F.bill)st.payFrom=F.ac;
+  if(F.t==='e'&&F.c){const D=st.catDef=st.catDef||{},v={ac:F.ac,p:F.p||''};D[F.c]=v;if(F.s)D[F.c+'/'+F.s]=v}
   st.lastAcc=F.ac;commitSettings();touched.forEach(commitMonth);
   const keepT=F.t,keepAc=F.ac,keepTo=F.to,d=F.d;
   if(!(RC&&RC.back)&&!DD)S.month=monthOf(F.d);
@@ -1517,8 +1506,8 @@ const ACTS={
   stat:t=>{S.stat=t.dataset.v;S.openCat='';render()},
   cat:t=>{S.openCat=S.openCat===t.dataset.c?'':t.dataset.c;render()},
   ftype:t=>{syncF();F.t=t.dataset.v;F.c='';F.s='';drawAdd()},
-  fcat:t=>{syncF();F.c=t.dataset.c;F.s='';drawAdd()},
-  fsub:t=>{syncF();F.s=F.s===t.dataset.s?'':t.dataset.s;drawAdd()},
+  fcat:t=>{syncF();F.c=t.dataset.c;F.s='';applyDef(F.c);drawAdd()},
+  fsub:t=>{syncF();F.s=F.s===t.dataset.s?'':t.dataset.s;if(F.s)applyDef(F.c+'/'+F.s);drawAdd()},
   fsave:t=>{syncF();const ns=$('#f-newsub');if(ns&&ns.value.trim())F.s=ns.value.trim();saveRec(!!t.dataset.again)},
   fdel:t=>{if(t.dataset.sure){deleteRec();return}t.dataset.sure='1';t.textContent='再按一次確認刪除'},
   settings:()=>openSettings(),
